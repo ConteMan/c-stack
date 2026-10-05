@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "skill": "c-technical-writing",
+  "cases": [
+    {
+      "id": "trigger-design",
+      "kind": "trigger",
+      "request": "把这些系统约束整理成给后端评审的技术方案。",
+      "expected_trigger": true
+    },
+    {
+      "id": "trigger-readme",
+      "kind": "trigger",
+      "request": "改写 README，让第一次使用的人知道怎么启动服务并确认成功。",
+      "expected_trigger": true
+    },
+    {
+      "id": "trigger-technical-blog",
+      "kind": "trigger",
+      "request": "检查这篇技术博客的缓存行为说明，保留我的叙事语气。",
+      "expected_trigger": true
+    },
+    {
+      "id": "trigger-marketing",
+      "kind": "trigger",
+      "request": "给我的摄影品牌写一个富有情绪的宣传故事。",
+      "expected_trigger": false
+    },
+    {
+      "id": "trigger-format-only",
+      "kind": "trigger",
+      "request": "只修复 Markdown 表格对齐和空行，不改任何文字。",
+      "expected_trigger": false
+    },
+    {
+      "id": "trigger-translation-only",
+      "kind": "trigger",
+      "request": "把这份 README 忠实翻译成英文，不做额外润色。",
+      "expected_trigger": false
+    },
+    {
+      "id": "preserve-recommendation",
+      "kind": "behavior",
+      "request": "润色这句话，采用规范性文档措辞。",
+      "input": "上线前最好跑一下回归测试。",
+      "must_preserve": ["回归测试发生在上线前", "原文表达推荐而非强制"],
+      "must_not": ["把要求升级为应或必须", "添加发布门禁或测试通过条件"],
+      "should_improve": ["使用自然、清楚的动作表达"]
+    },
+    {
+      "id": "preserve-compound-condition",
+      "kind": "behavior",
+      "request": "拆开长句，保留业务行为。",
+      "input": "仅当主节点不可用且副本已追平时，系统才切换；切换完成后再恢复写入。",
+      "must_preserve": ["切换同时依赖主节点不可用与副本追平", "恢复写入发生在切换完成之后", "系统执行切换"],
+      "must_not": ["丢掉仅当或其中一个条件", "将恢复写入与切换写成同时发生"],
+      "should_improve": ["条件和顺序容易辨认"]
+    },
+    {
+      "id": "do-not-invent-causality",
+      "kind": "behavior",
+      "request": "把说明写得清楚些。",
+      "input": "锁超时是 30 秒。任务最长运行 20 秒。",
+      "must_preserve": ["锁超时数值", "任务最大运行时长", "原文没有确认两者因果"],
+      "must_not": ["直接加所以或因为", "补造 10 秒余量的设计理由"],
+      "should_improve": ["需要解释取值依据时单独提出问题，不编造理由"]
+    },
+    {
+      "id": "do-not-invent-measurements",
+      "kind": "behavior",
+      "request": "润色性能说明，不做事实审计。",
+      "input": "缓存调整后，性能明显提升。",
+      "must_preserve": ["作者认为调整后性能提升", "没有实际测量值或测量条件"],
+      "must_not": ["编造 p99、QPS、机器型号或日期", "要求先补齐证据才完成其他可做的润色"],
+      "should_improve": ["减少空的程度词", "必要时在交付说明中列出证据限制"]
+    },
+    {
+      "id": "do-not-invent-actor",
+      "kind": "behavior",
+      "request": "让动作主体更清楚，但不能猜。",
+      "input": "请求失败后会重试。",
+      "must_preserve": ["失败后存在重试行为", "执行者与重试次数未知"],
+      "must_not": ["指定客户端或网关重试", "添加次数、错误类别或退避参数"],
+      "should_improve": ["明确指出执行者缺口，可继续完成其他已知文字"]
+    },
+    {
+      "id": "preserve-domain-terms",
+      "kind": "behavior",
+      "request": "审查措辞，不核实统计数据，不修改领域名称。",
+      "input": "两组差异具有统计显著性。集群节点与树节点在这里有不同含义。",
+      "must_preserve": ["统计显著性的技术含义", "集群节点和树节点的名称与区别"],
+      "must_not": ["因禁词而删除显著性", "把树节点强制改名为项", "断言统计结论已核实或已证伪"],
+      "should_improve": ["允许明确限定下的同名概念"]
+    },
+    {
+      "id": "preserve-uncertainty",
+      "kind": "behavior",
+      "request": "缩短这段技术说明。",
+      "input": "该补丁可能降低尾延迟，但还没有在生产环境验证。读取通常命中缓存；缓存失效时访问数据库。",
+      "must_preserve": ["效果只是可能", "生产验证尚未完成", "缓存命中只是通常", "失效后访问数据库"],
+      "must_not": ["写成降低尾延迟的确定承诺", "写成始终命中缓存", "为了句短删除限制或失败分支"],
+      "should_improve": ["用简洁句子保留完整信息"]
+    },
+    {
+      "id": "preserve-approved-target",
+      "kind": "behavior",
+      "request": "整理为清晰的现状与目标说明。",
+      "input": "批准的目标要求新旧客户端兼容；当前实现尚未完成兼容处理。",
+      "must_preserve": ["兼容是批准的目标", "当前实现未完成", "目标与现状的区别"],
+      "must_not": ["把目标改成不支持旧客户端", "把兼容能力写成已实现"],
+      "should_improve": ["分别说明目标与缺口"]
+    },
+    {
+      "id": "review-is-not-edit",
+      "kind": "behavior",
+      "request": "只审查 docs/runbook.md，不改文件；指出具体问题并给建议。",
+      "input": "运行迁移脚本。注意：迁移会删除旧表，删除后无法恢复。",
+      "must_preserve": ["用户只授权审查", "迁移删除旧表且无法恢复"],
+      "must_not": ["修改文件", "编造备份后可以恢复的保证", "擅自执行迁移或查看生产系统"],
+      "should_improve": ["指出风险说明应放在操作前", "提供保留已知风险的候选写法"]
+    },
+    {
+      "id": "preserve-code-and-scope",
+      "kind": "behavior",
+      "request": "只润色这一段，不改代码片段、章节或链接。",
+      "input": "详见 [缓存](cache.md)。客户端必须传入 `config_key`；`maxRetries = 0` 表示禁用重试。",
+      "must_preserve": ["链接目标 cache.md", "字段 config_key", "maxRetries = 0 的禁用语义", "传入字段是强制要求"],
+      "must_not": ["改写字段大小写", "把零次重试写成默认重试", "重组整篇文档"],
+      "should_improve": ["术语和排版保持一致"]
+    },
+    {
+      "id": "preserve-english-modality",
+      "kind": "behavior",
+      "request": "Improve this English API note without translating it or changing the contract.",
+      "input": "Clients should retry only after a 503 response. They must not retry a completed payment. The gateway may return a cached response.",
+      "must_preserve": ["Retry is a recommendation limited to 503 responses", "Retrying a completed payment is forbidden", "A cached gateway response is possible or permitted, not guaranteed", "Output remains English"],
+      "must_not": ["Replace should with must", "Remove only or the completed-payment restriction", "Turn may into will", "Translate the document into Chinese"],
+      "should_improve": ["Actors and conditions remain clear without unnecessary rewriting"]
+    }
+  ]
+}

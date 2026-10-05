@@ -1,0 +1,4 @@
+interface:
+  display_name: "技术写作"
+  short_description: "撰写、改写和审查技术文档，保留要求强度、条件与不确定性，让结构和表达服务读者任务"
+  default_prompt: "用 $c-technical-writing 撰写或改进这份技术文档，保留事实、要求强度、条件和不确定性。"
