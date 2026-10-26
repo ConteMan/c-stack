@@ -1,0 +1,4 @@
+interface:
+  display_name: "项目概览画布"
+  short_description: "从全貌到局部梳理项目用途、主线、现状与决策，生成可批注的离线画布并按反馈持续更新"
+  default_prompt: "用 $c-project-atlas 生成或更新这个项目的概览画布，核对来源并说明现状与决策。"

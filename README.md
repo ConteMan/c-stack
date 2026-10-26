@@ -7,6 +7,7 @@ ConteMan 长期维护的 Agent Skills：把真实工作中反复有效的方法�
 | 技能 | 用途 | 状态 |
 |---|---|---|
 | [c-technical-writing](skills/c-technical-writing/SKILL.md) | 撰写、改写和审查技术文档；优先保留语义，再改善结构和措辞 | 初版，待真实任务评估 |
+| [c-project-atlas](skills/c-project-atlas/SKILL.md) | 用 Markdown 维护项目全貌、主线、现状与决策，由零依赖 CLI 生成可批注的离线画布 | 初版，脚本与浏览器回归；模型行为待评估 |
 
 ## 使用
 
@@ -46,7 +47,7 @@ tests/                  # 仓库工具的回归测试
 
 ## 验证
 
-需要 Python 3.10+。写作技能本身不依赖 Python 或联网。
+仓库验证需要 Python 3.10+；画布 CLI 和其测试需要 Node.js 20+。写作技能本身不依赖 Python 或联网。
 
 ```sh
 python3 -m venv .venv
@@ -55,7 +56,7 @@ make validate PYTHON=.venv/bin/python
 make test PYTHON=.venv/bin/python
 ```
 
-静态校验检查技能元数据、引用路径和评估用例格式。测试验证仓库工具的行为。二者都不能证明模型的触发与写作质量；行为评估方式见 [维护说明](docs/maintenance.md)。
+静态校验检查技能元数据、引用路径和评估用例格式。测试验证仓库工具及画布 CLI 的行为。二者都不能证明模型的触发与写作质量；行为评估方式见 [维护说明](docs/maintenance.md)。
 
 ## 维护
 
