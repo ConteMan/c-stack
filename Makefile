@@ -6,3 +6,4 @@ validate:
 
 test:
 	$(PYTHON) -m unittest discover -s tests -v
+	node --test tests/*.test.mjs
