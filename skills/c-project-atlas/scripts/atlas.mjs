@@ -209,20 +209,122 @@ export function feedback(text, ctx) {
   return { schema_version: 1, overview_version: value.overview_version, revision: value.revision, comments, warnings };
 }
 
+// Routing is compiled with layout so the browser and geometry tests use the same paths.
+function segments(points) { return points.slice(1).map((p, i) => [points[i], p]); }
+function hitsBox([a, b], r) {
+  if (a.x === b.x) return a.x > r.x && a.x < r.x + r.w && Math.max(a.y, b.y) > r.y && Math.min(a.y, b.y) < r.y + r.h;
+  return a.y > r.y && a.y < r.y + r.h && Math.max(a.x, b.x) > r.x && Math.min(a.x, b.x) < r.x + r.w;
+}
+function crosses([a, b], [c, d]) {
+  if (a.x === b.x && c.x === d.x) return Math.abs(a.x - c.x) < 10 && Math.max(Math.min(a.y, b.y), Math.min(c.y, d.y)) < Math.min(Math.max(a.y, b.y), Math.max(c.y, d.y));
+  if (a.y === b.y && c.y === d.y) return Math.abs(a.y - c.y) < 10 && Math.max(Math.min(a.x, b.x), Math.min(c.x, d.x)) < Math.min(Math.max(a.x, b.x), Math.max(c.x, d.x));
+  const [v, h] = a.x === b.x ? [[a, b], [c, d]] : [[c, d], [a, b]];
+  return v[0].x >= Math.min(h[0].x, h[1].x) && v[0].x <= Math.max(h[0].x, h[1].x) && h[0].y >= Math.min(v[0].y, v[1].y) && h[0].y <= Math.max(v[0].y, v[1].y);
+}
+function compact(points) {
+  const result = [];
+  for (const p of points) {
+    if (result.length && result.at(-1).x === p.x && result.at(-1).y === p.y) continue;
+    while (result.length > 1) {
+      const a = result.at(-2), b = result.at(-1);
+      if ((a.x === b.x && b.x === p.x && (b.y - a.y) * (p.y - b.y) >= 0) || (a.y === b.y && b.y === p.y && (b.x - a.x) * (p.x - b.x) >= 0)) result.pop();
+      else break;
+    }
+    result.push(p);
+  }
+  return result;
+}
+
+export function routeEdges(nodes, regions) {
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const links = nodes.flatMap(n => n.links.map(l => ({ from: n.id, to: l.target, label: l.label })));
+  const routes = [], omitted = [], occupied = [], labelBoxes = [];
+  const right = Math.max(...nodes.map(n => n.x + n.w)), bottom = Math.max(...regions.map(r => r.y + r.h));
+  const headings = regions.map(r => ({ x: r.x + 12, y: r.y + 12, w: Math.min(r.w - 24, [...r.title].length * 20 + 100), h: 36 }));
+  const padded = nodes.map(n => ({ x: n.x - 8, y: n.y - 8, w: n.w + 16, h: n.h + 16 }));
+  // Adjacent flow links get the short, horizontal channels before other edges.
+  const adjacent = link => {
+    const a = byId.get(link.from), b = byId.get(link.to), r = regions.find(r => r.id === a.section);
+    return a.section === b.section && r.layout === 'flow' && Math.abs(r.cards.indexOf(a.id) - r.cards.indexOf(b.id)) === 1;
+  };
+  const ordered = links.map((l, index) => ({ ...l, index })).sort((a, b) => Number(adjacent(b)) - Number(adjacent(a)) || a.index - b.index);
+  for (const link of ordered) {
+    const a = byId.get(link.from), b = byId.get(link.to), candidates = [];
+    const obstacles = [...nodes.map((n, i) => n.id === a.id || n.id === b.id ? n : padded[i]), ...headings];
+    if (a.id !== b.id && adjacent(link)) {
+      const y = a.y + a.h / 2 + link.index / (links.length + 1) * 4;
+      candidates.push([{ x: a.x + (b.x > a.x ? a.w : 0), y }, { x: b.x + (b.x > a.x ? 0 : b.w), y }]);
+    }
+    const fraction = .32 + .36 * (link.index + 1) / (links.length + 1);
+    const ports = n => [
+      { p: { x: n.x + n.w * fraction, y: n.y }, dx: 0, dy: -1 },
+      { p: { x: n.x + n.w * fraction, y: n.y + n.h }, dx: 0, dy: 1 },
+      { p: { x: n.x, y: n.y + n.h * fraction }, dx: -1, dy: 0 },
+      { p: { x: n.x + n.w, y: n.y + n.h * fraction }, dx: 1, dy: 0 },
+    ];
+    if (a.id !== b.id) for (const ap of ports(a)) for (const bp of ports(b)) for (const offset of [18, 30, 42, 54]) {
+      const distance = offset + 5 * (link.index + 1) / (links.length + 1);
+      const s = { x: ap.p.x + ap.dx * distance, y: ap.p.y + ap.dy * distance };
+      const t = { x: bp.p.x + bp.dx * distance, y: bp.p.y + bp.dy * distance };
+      candidates.push([ap.p, s, { x: t.x, y: s.y }, t, bp.p], [ap.p, s, { x: s.x, y: t.y }, t, bp.p]);
+      const gutter = right + 28 + link.index * 12;
+      candidates.push([ap.p, s, { x: gutter, y: s.y }, { x: gutter, y: t.y }, t, bp.p]);
+      const floor = bottom + 24 + link.index * 12;
+      candidates.push([ap.p, s, { x: s.x, y: floor }, { x: t.x, y: floor }, t, bp.p]);
+    }
+    let best, cost = Infinity;
+    for (const candidate of candidates) {
+      const points = compact(candidate), lines = segments(points);
+      if (!lines.length || points.some(p => p.x < 8 || p.y < 8)) continue;
+      if (lines.some(line => [...obstacles, ...labelBoxes].some(r => hitsBox(line, r)) || occupied.some(other => crosses(line, other)))) continue;
+      // A route must not double back over or intersect itself either.
+      if (lines.some((line, i) => lines.slice(i + 2).some(other => crosses(line, other)))) continue;
+      const length = lines.reduce((sum, [p, q]) => sum + Math.abs(q.x - p.x) + Math.abs(q.y - p.y), 0) + lines.length * 28;
+      if (length < cost) { best = points; cost = length; }
+    }
+    if (!best) { omitted.push({ from: link.from, to: link.to, label: link.label }); continue; }
+    const route = { from: link.from, to: link.to, label: link.label, points: best };
+    if (link.label) {
+      // Conservative width also covers wide Latin glyphs and the text outline.
+      const w = [...link.label].length * 14 + 12;
+      const positions = segments(best).filter(([p, q]) => p.y === q.y).flatMap(([p, q]) => {
+        const x = (p.x + q.x - w) / 2;
+        return [{ x, y: p.y - 25, w, h: 18 }, { x, y: p.y + 8, w, h: 18 }, ...(best.length === 2 && adjacent(link) ? [{ x, y: a.y - 28, w, h: 18 }] : [])];
+      });
+      route.labelBox = positions.find(r => r.x > 8 && r.y > 8 && ![...padded, ...headings, ...labelBoxes].some(o => r.x < o.x + o.w && r.x + r.w > o.x && r.y < o.y + o.h && r.y + r.h > o.y) && ![...occupied, ...segments(best)].some(line => hitsBox(line, r)));
+      if (route.labelBox) labelBoxes.push(route.labelBox);
+    }
+    routes.push(route); occupied.push(...segments(best));
+  }
+  return { routes, omitted };
+}
+
 export function layout(data) {
-  const width = 1160, w = 340, h = 176, gap = 30, nodes = [], sections = [];
+  const flowWidth = Math.max(0, ...data.sections.filter(s => s.layout === 'flow').map(s => s.cards.length * 280 + Math.max(0, s.cards.length - 1) * 40));
+  const gridCardWidth = Math.min(600, Math.max(340, (flowWidth - 80) / 3));
+  const h = 210, gap = 40, rowGap = 80, nodes = [], sections = [];
   let y = 26;
   for (const section of data.sections) {
-    const rows = Math.ceil(section.cards.length / 3), height = rows * (h + gap) + 72;
-    sections.push({ ...section, x: 20, y, w: width - 40, h: height });
+    const flow = section.layout === 'flow', cols = flow ? section.cards.length : Math.min(3, section.cards.length);
+    const w = flow ? 280 : gridCardWidth, rows = Math.ceil(section.cards.length / cols);
+    const width = cols * w + (cols - 1) * gap + 40, height = 80 + rows * h + (rows - 1) * rowGap + 40;
+    sections.push({ ...section, x: 20, y, w: width, h: height });
     section.cards.forEach((id, i) => {
-      // Flow folds into serpentine rows; grid always reads left to right.
-      const row = Math.floor(i / 3), col = section.layout === 'flow' && row % 2 ? 2 - i % 3 : i % 3;
-      nodes.push({ ...data.cards.find(c => c.id === id), x: 40 + col * (w + gap), y: y + 66 + row * (h + gap), w, h });
+      nodes.push({ ...data.cards.find(c => c.id === id), x: 40 + (i % cols) * (w + gap), y: y + 80 + Math.floor(i / cols) * (h + rowGap), w, h });
     });
-    y += height + 28;
+    y += height + 32;
   }
-  return { ...data, nodes, regions: sections, width, height: y };
+  const geometry = routeEdges(nodes, sections);
+  const points = geometry.routes.flatMap(r => r.points);
+  const width = Math.max(...sections.map(s => s.x + s.w), ...points.map(p => p.x)) + 32;
+  const height = Math.max(y, ...points.map(p => p.y + 32));
+  return { ...data, nodes, regions: sections, width, height, ...geometry };
+}
+
+// A reading view can crop a wide canvas; fitting the entire atlas is explicit.
+export function readingCamera(region, width) {
+  const z = Math.min(1, Math.max(.6, (width - 64) / region.w));
+  return { z, x: 32 - region.x * z, y: 28 - region.y * z };
 }
 
 const escapeHTML = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -234,13 +336,13 @@ export function render(data) {
 <body><header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">◈</span><div><h1 id="project"></h1><small>PROJECT ATLAS</small></div></div><div class="page-heading"><span id="page-title"></span><small id="snapshot"></small></div><div class="search-wrap"><input id="search" type="search" placeholder="搜索概览…" aria-label="搜索概览卡片" aria-controls="search-results" aria-expanded="false"><div id="search-results" hidden></div></div><button id="theme-toggle" aria-label="切换明暗模式">◐</button><button id="open-feedback">批注 <span id="feedback-count">0</span></button></header>
 <main><aside class="sidebar"><div class="eyebrow">READ THE PROJECT</div><h2>从全貌，<br>走进项目。</h2><p>看清用途与主线，<br>了解进展与尚待决定的事。</p><nav id="routes" aria-label="画布分区"></nav><p class="hint">拖动平移 · 滚轮移动<br>Ctrl / ⌘ + 滚轮缩放<br>批注临时保留，刷新前请复制。</p></aside><section id="viewport" aria-label="可平移缩放的项目画布" tabindex="0"><div id="world"><svg id="edges" aria-hidden="true"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 10 5 0 10Z" fill="var(--green)"/></marker></defs></svg></div><div class="toolbar" aria-label="画布工具"><button id="zoom-out" aria-label="缩小">−</button><output id="zoom-value"></output><button id="zoom-in" aria-label="放大">＋</button><button id="fit-all">返回全貌</button><button id="actual-size">1:1</button></div><div class="map-wrap"><small>你在这里</small><svg id="minimap" aria-label="画布位置示意" role="img"></svg></div></section><div id="mobile-list"></div><aside id="drawer" aria-label="卡片详情" hidden><div class="drawer-top"><span class="eyebrow">深入一层</span><button id="close-detail" aria-label="关闭卡片详情">✕</button></div><div id="detail-content" class="drawer-scroll"></div><div class="note-compose"><label for="node-note">给这张卡片留个批注</label><textarea id="node-note" placeholder="哪里没看懂？" maxlength="2000"></textarea><button id="add-note">加入反馈</button><small>输入中的批注也会包含在复制结果中。</small></div></aside></main>
 <dialog id="feedback-dialog" aria-labelledby="feedback-title"><div class="dialog-head"><h2 id="feedback-title">交给 Agent 的反馈</h2><button id="close-feedback" aria-label="关闭反馈">✕</button></div><div class="dialog-body"><p class="hint">批注仅在当前页面临时保留。复制后粘贴给 Agent，继续调整概览。</p><div id="feedback-items"></div><label for="overall-note">整体意见</label><textarea id="overall-note" maxlength="2000"></textarea><div id="copy-fallback" hidden><p>浏览器未允许自动复制，请全选下方文本并复制。</p><textarea id="copy-text" readonly aria-label="待手动复制的完整反馈"></textarea><button id="select-copy-text">全选反馈文本</button></div></div><div class="dialog-footer"><small id="feedback-status"></small><button id="copy-feedback" class="primary">复制全部反馈</button></div></dialog><div id="toast" role="status" hidden></div>
-<script id="atlas-data" type="application/json">${json}</script><script>'use strict';\n${feedbackText.toString()}\n(${browser.toString()})();</script></body></html>\n`;
+<script id="atlas-data" type="application/json">${json}</script><script>'use strict';\n${feedbackText.toString()}\n${readingCamera.toString()}\n(${browser.toString()})();</script></body></html>\n`;
 }
 
 const CSS = `
 :root{--bg:#f5f4f0;--card:#fff;--ink:#252a28;--muted:#69736e;--border:#dcdfd8;--green:#256d57;--green-bg:#e9f2eb;--orange:#b9612b;--orange-bg:#fff0e4;--grid:#dcded6;--shadow:0 12px 35px #27362d0d;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
 :root[data-theme=dark]{--bg:#171e1b;--card:#222c27;--ink:#edf0e8;--muted:#b2bdb4;--border:#3c4940;--green:#92cbb1;--green-bg:#293e32;--orange:#edb183;--orange-bg:#3d3026;--grid:#354139;--shadow:0 12px 35px #0002}
-*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 var(--sans);overflow:hidden}button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;border:1px solid var(--border);border-radius:9px;padding:8px 12px;background:var(--card)}button:hover{border-color:var(--green)}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--green);outline-offset:3px}a{color:var(--green);overflow-wrap:anywhere}.primary{background:var(--green);color:var(--card)}:root[data-theme=dark] .primary{color:#17251c}small,.hint,.eyebrow{color:var(--muted)}.eyebrow{font-size:10px;letter-spacing:1.6px}.topbar{height:84px;display:flex;align-items:center;gap:18px;padding:0 26px;border-bottom:1px solid var(--border);background:var(--card);position:relative;z-index:5}.brand{display:flex;gap:12px;align-items:center;min-width:0}.brand-mark{background:var(--green);color:var(--card);border-radius:12px;width:38px;height:38px;display:grid;place-items:center;font-size:24px}.brand h1{font-size:20px;line-height:1.25;margin:0;overflow:hidden;text-overflow:ellipsis;max-width:240px}.brand small{font-size:9px;letter-spacing:1.6px}.page-heading{border-left:1px solid var(--border);padding-left:18px;min-width:0}.page-heading span,.page-heading small{display:block}.page-heading small{font-size:10px}.search-wrap{margin-left:auto;position:relative;width:220px;flex-shrink:1}input{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg)}#search-results{position:absolute;right:0;top:45px;width:min(320px,90vw);max-height:360px;overflow:auto;background:var(--card);padding:8px;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow)}#search-results button{width:100%;text-align:left;border:0}#feedback-count{font-size:11px;color:var(--green);background:var(--green-bg);padding:2px 5px;border-radius:4px}.topbar>button{flex-shrink:0;white-space:nowrap}main{display:flex;height:calc(100dvh - 84px);position:relative}.sidebar{width:210px;flex-shrink:0;padding:28px 20px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:auto}.sidebar h2{font-size:22px;line-height:1.6;margin:10px 0}.sidebar p{font-size:12px;color:var(--muted);margin:0 0 24px}.sidebar .hint{margin-top:auto;padding-top:25px;font-size:10px}#routes button{display:block;text-align:left;width:100%;border:0;margin:4px 0;padding:12px;background:transparent}#routes button.active{background:var(--green-bg);color:var(--green)}#viewport{position:relative;flex:1;min-width:0;overflow:hidden;touch-action:none;cursor:grab;background-image:radial-gradient(var(--grid) .85px,transparent .85px);background-size:22px 22px}#viewport.dragging{cursor:grabbing}#world{position:absolute;left:0;top:0;transform-origin:0 0}#edges{position:absolute;inset:0;overflow:visible;pointer-events:none}#edges .edge{fill:none;stroke:var(--green);stroke-width:2;opacity:.7}#edges text{font-size:12px;fill:var(--green);paint-order:stroke;stroke:var(--bg);stroke-width:7px;stroke-linejoin:round}.zone{position:absolute;border:1px solid var(--border);border-radius:18px;pointer-events:none;background:color-mix(in srgb,var(--green-bg) 25%,transparent)}.zone h2{font-size:18px;margin:17px 20px;color:var(--muted);font-weight:500}.node{position:absolute;text-align:left;padding:22px;display:flex;flex-direction:column;gap:10px;user-select:none;border-radius:14px;background:var(--card);box-shadow:var(--shadow)}.node h3{font-size:23px;line-height:1.35;margin:0;letter-spacing:-.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.node p{font-size:17px;line-height:1.6;color:var(--muted);margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.node.selected{outline:3px solid var(--green);outline-offset:4px}.node .badge{position:absolute;right:-10px;top:-10px;background:var(--orange);color:var(--card);border:3px solid var(--bg);border-radius:9px;min-width:27px;text-align:center;font-size:13px}.toolbar{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:3px;background:var(--card);padding:6px;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);white-space:nowrap}.toolbar button{border:0;background:transparent}.toolbar output{width:42px;font-size:11px;text-align:center}.map-wrap{position:absolute;bottom:24px;right:18px;width:116px;padding:8px;background:var(--card);border:1px solid var(--border);border-radius:10px;pointer-events:none}.map-wrap small{font-size:9px}#minimap{width:100%;max-height:170px}#mobile-list{display:none}#drawer{width:370px;flex-shrink:0;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0;z-index:4}.drawer-top{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 10px}.drawer-top button{border:0}.drawer-scroll{flex:1;overflow:auto;padding:0 26px 24px}.drawer-scroll h2{font-size:25px;line-height:1.45;letter-spacing:-.6px;margin:12px 0}.detail-intro{font-size:14px;line-height:1.9;white-space:pre-line}.tags{display:flex;gap:5px;flex-wrap:wrap}.tag{font-size:10px;padding:3px 7px;background:var(--green-bg);color:var(--green);border-radius:5px}.sources{border-top:1px solid var(--border);margin-top:20px;padding-top:14px}.sources h3{font-size:12px}.sources a{display:block;font:11px/1.8 ui-monospace,monospace;margin:8px 0}.metadata{font:11px/1.8 ui-monospace,monospace;margin-top:18px;color:var(--muted)}.note-compose{padding:18px 22px;border-top:1px solid var(--border)}label{display:block;font-size:12px;margin:0 0 8px}.note-compose button{display:block;margin-top:10px}.note-compose small{font-size:10px}textarea{width:100%;resize:vertical;min-height:80px;max-height:180px;border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:10px;font-size:13px;line-height:1.7}.note{background:var(--orange-bg);padding:12px;border-radius:9px;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0}dialog{width:min(680px,calc(100vw - 24px));max-height:calc(100dvh - 40px);border:1px solid var(--border);border-radius:18px;background:var(--card);color:var(--ink);padding:0;box-shadow:0 30px 100px #0003}dialog::backdrop{background:#14251bbb;backdrop-filter:blur(4px)}.dialog-head,.dialog-footer{display:flex;align-items:center;gap:14px;padding:18px 24px}.dialog-head{border-bottom:1px solid var(--border)}.dialog-head h2{font-size:19px;margin:0;flex:1}.dialog-body{padding:18px 24px;max-height:calc(100dvh - 220px);overflow:auto}.dialog-body>.hint{font-size:12px}.dialog-footer{border-top:1px solid var(--border)}.dialog-footer small{flex:1;font-size:10px}.feedback-item{border:1px solid var(--border);padding:12px;border-radius:9px;margin-bottom:12px}.feedback-item strong{font-size:13px}.feedback-item button{float:right;font-size:10px;padding:3px 8px}.feedback-item p{white-space:pre-wrap;overflow-wrap:anywhere}#copy-fallback{padding:12px;background:var(--green-bg);border-radius:10px;margin-top:15px}#copy-fallback p{font-size:12px}#copy-text{min-height:150px;font:11px/1.7 ui-monospace,monospace}#toast{position:fixed;left:50%;bottom:95px;transform:translateX(-50%);padding:12px 20px;max-width:90vw;border-radius:9px;background:var(--ink);color:var(--card);font-size:12px;z-index:20}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 var(--sans);overflow:hidden}button,input,textarea{font:inherit;color:inherit}button{cursor:pointer;border:1px solid var(--border);border-radius:9px;padding:8px 12px;background:var(--card)}button:hover{border-color:var(--green)}button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--green);outline-offset:3px}a{color:var(--green);overflow-wrap:anywhere}.primary{background:var(--green);color:var(--card)}:root[data-theme=dark] .primary{color:#17251c}small,.hint,.eyebrow{color:var(--muted)}.eyebrow{font-size:10px;letter-spacing:1.6px}.topbar{height:84px;display:flex;align-items:center;gap:18px;padding:0 26px;border-bottom:1px solid var(--border);background:var(--card);position:relative;z-index:5}.brand{display:flex;gap:12px;align-items:center;min-width:0}.brand-mark{background:var(--green);color:var(--card);border-radius:12px;width:38px;height:38px;display:grid;place-items:center;font-size:24px}.brand h1{font-size:20px;line-height:1.25;margin:0;overflow:hidden;text-overflow:ellipsis;max-width:240px}.brand small{font-size:9px;letter-spacing:1.6px}.page-heading{border-left:1px solid var(--border);padding-left:18px;min-width:0}.page-heading span,.page-heading small{display:block}.page-heading small{font-size:10px}.search-wrap{margin-left:auto;position:relative;width:220px;flex-shrink:1}input{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg)}#search-results{position:absolute;right:0;top:45px;width:min(320px,90vw);max-height:360px;overflow:auto;background:var(--card);padding:8px;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow)}#search-results button{width:100%;text-align:left;border:0}#feedback-count{font-size:11px;color:var(--green);background:var(--green-bg);padding:2px 5px;border-radius:4px}.topbar>button{flex-shrink:0;white-space:nowrap}main{display:flex;height:calc(100dvh - 84px);position:relative}.sidebar{width:210px;flex-shrink:0;padding:28px 20px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:auto}.sidebar h2{font-size:22px;line-height:1.6;margin:10px 0}.sidebar p{font-size:12px;color:var(--muted);margin:0 0 24px}.sidebar .hint{margin-top:auto;padding-top:25px;font-size:10px}#routes button{display:block;text-align:left;width:100%;border:0;margin:4px 0;padding:12px;background:transparent}#routes button.active{background:var(--green-bg);color:var(--green)}#viewport{position:relative;flex:1;min-width:0;overflow:hidden;touch-action:none;cursor:grab;background-image:radial-gradient(var(--grid) .85px,transparent .85px);background-size:22px 22px}#viewport.dragging{cursor:grabbing}#world{position:absolute;left:0;top:0;transform-origin:0 0}#edges{position:absolute;inset:0;overflow:visible;pointer-events:none}#edges .edge{fill:none;stroke:var(--green);stroke-width:2;opacity:.7}#edges text{font-size:12px;fill:var(--green);paint-order:stroke;stroke:var(--bg);stroke-width:7px;stroke-linejoin:round}.zone{position:absolute;border:1px solid var(--border);border-radius:18px;pointer-events:none;background:color-mix(in srgb,var(--green-bg) 25%,transparent)}.zone h2{font-size:18px;margin:17px 20px;color:var(--muted);font-weight:500}.node{position:absolute;text-align:left;padding:22px;display:flex;flex-direction:column;gap:10px;user-select:none;border-radius:14px;background:var(--card);box-shadow:var(--shadow)}.node h3{font-size:23px;line-height:1.35;margin:0;letter-spacing:-.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.node p{font-size:17px;line-height:1.6;color:var(--muted);margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.node.wide h3{font-size:27px}.node.wide p{font-size:19px}.relations button{display:block;text-align:left;width:100%;margin:8px 0;font-size:12px}.node.selected{outline:3px solid var(--green);outline-offset:4px}.node .badge{position:absolute;right:-10px;top:-10px;background:var(--orange);color:var(--card);border:3px solid var(--bg);border-radius:9px;min-width:27px;text-align:center;font-size:13px}.toolbar{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:3px;background:var(--card);padding:6px;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);white-space:nowrap}.toolbar button{border:0;background:transparent}.toolbar output{width:42px;font-size:11px;text-align:center}.map-wrap{position:absolute;bottom:24px;right:18px;width:116px;padding:8px;background:var(--card);border:1px solid var(--border);border-radius:10px;pointer-events:none}.map-wrap small{font-size:9px}#minimap{width:100%;max-height:170px}#mobile-list{display:none}#drawer{width:370px;flex-shrink:0;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0;z-index:4}.drawer-top{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 10px}.drawer-top button{border:0}.drawer-scroll{flex:1;overflow:auto;padding:0 26px 24px}.drawer-scroll h2{font-size:25px;line-height:1.45;letter-spacing:-.6px;margin:12px 0}.detail-intro{font-size:14px;line-height:1.9;white-space:pre-line}.tags{display:flex;gap:5px;flex-wrap:wrap}.tag{font-size:10px;padding:3px 7px;background:var(--green-bg);color:var(--green);border-radius:5px}.sources{border-top:1px solid var(--border);margin-top:20px;padding-top:14px}.sources h3{font-size:12px}.sources a{display:block;font:11px/1.8 ui-monospace,monospace;margin:8px 0}.metadata{font:11px/1.8 ui-monospace,monospace;margin-top:18px;color:var(--muted)}.note-compose{padding:18px 22px;border-top:1px solid var(--border)}label{display:block;font-size:12px;margin:0 0 8px}.note-compose button{display:block;margin-top:10px}.note-compose small{font-size:10px}textarea{width:100%;resize:vertical;min-height:80px;max-height:180px;border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:10px;font-size:13px;line-height:1.7}.note{background:var(--orange-bg);padding:12px;border-radius:9px;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0}dialog{width:min(680px,calc(100vw - 24px));max-height:calc(100dvh - 40px);border:1px solid var(--border);border-radius:18px;background:var(--card);color:var(--ink);padding:0;box-shadow:0 30px 100px #0003}dialog::backdrop{background:#14251bbb;backdrop-filter:blur(4px)}.dialog-head,.dialog-footer{display:flex;align-items:center;gap:14px;padding:18px 24px}.dialog-head{border-bottom:1px solid var(--border)}.dialog-head h2{font-size:19px;margin:0;flex:1}.dialog-body{padding:18px 24px;max-height:calc(100dvh - 220px);overflow:auto}.dialog-body>.hint{font-size:12px}.dialog-footer{border-top:1px solid var(--border)}.dialog-footer small{flex:1;font-size:10px}.feedback-item{border:1px solid var(--border);padding:12px;border-radius:9px;margin-bottom:12px}.feedback-item strong{font-size:13px}.feedback-item button{float:right;font-size:10px;padding:3px 8px}.feedback-item p{white-space:pre-wrap;overflow-wrap:anywhere}#copy-fallback{padding:12px;background:var(--green-bg);border-radius:10px;margin-top:15px}#copy-fallback p{font-size:12px}#copy-text{min-height:150px;font:11px/1.7 ui-monospace,monospace}#toast{position:fixed;left:50%;bottom:95px;transform:translateX(-50%);padding:12px 20px;max-width:90vw;border-radius:9px;background:var(--ink);color:var(--card);font-size:12px;z-index:20}
 @media(max-width:1100px){.page-heading{display:none}.sidebar{width:170px;padding:22px 14px}.map-wrap{display:none}#drawer{width:340px}.topbar{padding:0 18px;gap:12px}}
 @media(min-width:641px) and (max-width:800px){.sidebar{width:130px}.brand-mark{display:none}.search-wrap{width:160px}#drawer{position:absolute;right:0;top:0;bottom:0;width:340px;box-shadow:-20px 0 60px #0002}}
 @media(max-width:640px){body{overflow:auto}.topbar{height:auto;min-height:110px;padding:12px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;position:sticky;top:0}.brand{gap:8px}.brand h1{max-width:none;font-size:18px}.brand-mark{width:30px;height:30px;font-size:20px}.brand small{font-size:8px}.search-wrap{grid-row:2;grid-column:1/-1;width:100%;margin:0}.topbar>button{padding:7px 10px;font-size:12px}.page-heading,.sidebar,#viewport{display:none}main{display:block;height:auto}#mobile-list{display:block;padding:10px 16px 40px}#mobile-list section>h2{font-size:18px;font-weight:500;margin:25px 0 12px;color:var(--muted)}#mobile-list .node{position:relative;width:100%;height:auto;min-height:135px;margin:12px 0;padding:19px;border-radius:12px;user-select:auto}#mobile-list .node h3{font-size:20px;-webkit-line-clamp:unset}#mobile-list .node p{font-size:14px;-webkit-line-clamp:unset}#drawer{position:fixed;inset:0;width:100%;height:100dvh;border:0;z-index:8}.drawer-scroll{padding:0 24px 20px}.drawer-scroll h2{font-size:24px}.dialog-head,.dialog-body,.dialog-footer{padding:16px}.dialog-head h2{font-size:17px}.dialog-footer{gap:8px}.dialog-footer small{font-size:9px}.dialog-footer button{font-size:12px}#toast{bottom:22px}}
@@ -252,7 +354,7 @@ function browser() {
   const $ = id => document.getElementById(id), NS = 'http://www.w3.org/2000/svg';
   const nodes = new Map(D.nodes.map(n => [n.id, n])), cards = new Map(), mobileCards = new Map();
   const vp = $('viewport'), world = $('world'), drawer = $('drawer');
-  const state = { x: 0, y: 0, z: 1, selected: null, view: 'all', comments: [], drafts: Object.create(null), overall: '', changed: 0, copied: -1 };
+  const state = { x: 0, y: 0, z: 1, selected: null, view: D.regions[0].id, comments: [], drafts: Object.create(null), overall: '', changed: 0, copied: -1 };
   const types = { fact: '项目能力', done: '已完成', next: '进行中 / 下一步', decision: '关键决策', open: '悬而未决' };
   let toastTimer, fitPending = true, lastFocus;
   const mobile = () => matchMedia('(max-width:640px)').matches;
@@ -285,9 +387,9 @@ function browser() {
   function setView(id) {
     closeDetail(); state.view = id; fitPending = true;
     for (const b of $('routes').children) { b.classList.toggle('active', b.dataset.view === id); b.setAttribute('aria-pressed', String(b.dataset.view === id)); }
-    fitRect(id === 'all' ? { x: 0, y: 0, w: D.width, h: D.height } : D.regions.find(s => s.id === id));
+    if (id === null) fitRect({ x: 0, y: 0, w: D.width, h: D.height });
+    else { Object.assign(state, readingCamera(D.regions.find(s => s.id === id), vp.clientWidth)); draw(); }
   }
-  const allButton = el('button', 'active', '先看全貌'); allButton.dataset.view = 'all'; allButton.onclick = () => setView('all'); $('routes').append(allButton);
   for (const [index, s] of D.regions.entries()) {
     const zone = el('div', 'zone'); Object.assign(zone.style, { left: s.x + 'px', top: s.y + 'px', width: s.w + 'px', height: s.h + 'px' }); zone.append(el('h2', '', `${String(index + 1).padStart(2, '0')} / ${s.title}`)); world.prepend(zone);
     const b = el('button', '', s.title); b.dataset.view = s.id; b.onclick = () => setView(s.id); $('routes').append(b);
@@ -295,7 +397,7 @@ function browser() {
   }
   for (const n of D.nodes) {
     function card(isMobile) {
-      const b = el('button', 'node'); b.type = 'button'; b.dataset.id = n.id;
+      const b = el('button', 'node' + (n.w > 400 ? ' wide' : '')); b.type = 'button'; b.dataset.id = n.id;
       b.setAttribute('aria-label', n.title + '，查看说明和批注'); b.append(el('h3', '', n.title), el('p', '', n.summary));
       const badge = el('span', 'badge'); badge.hidden = true; b.append(badge);
       if (!isMobile) Object.assign(b.style, { left: n.x + 'px', top: n.y + 'px', width: n.w + 'px', height: n.h + 'px' });
@@ -305,19 +407,25 @@ function browser() {
     const c = card(false), m = card(true); world.append(c); cards.set(n.id, c); $('mobile-' + n.section).append(m); mobileCards.set(n.id, m);
     $('minimap').append(svg('rect', { x: n.x, y: n.y, width: n.w, height: n.h, rx: 9, fill: 'var(--green)', opacity: '.4' }));
   }
-  for (const a of D.nodes) for (const link of a.links) {
-    const b = nodes.get(link.target), sameRow = a.y === b.y, right = b.x >= a.x;
-    const ax = sameRow ? a.x + (right ? a.w : 0) : a.x + a.w / 2, ay = sameRow ? a.y + a.h / 2 : a.y + a.h;
-    const bx = sameRow ? b.x + (right ? 0 : b.w) : b.x + b.w / 2, by = sameRow ? b.y + b.h / 2 : b.y;
-    const d = sameRow ? `M${ax},${ay} L${bx},${by}` : `M${ax},${ay} C${ax},${ay + 35} ${bx},${by - 35} ${bx},${by}`;
+  for (const route of D.routes) {
+    const d = route.points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ');
     $('edges').append(svg('path', { d, class: 'edge', 'marker-end': 'url(#arrow)' }));
-    if (link.label) { const label = svg('text', { x: (ax + bx) / 2, y: (ay + by) / 2 - 8, 'text-anchor': 'middle' }); label.textContent = link.label; $('edges').append(label); }
+    if (route.labelBox) {
+      const r = route.labelBox, label = svg('text', { x: r.x + r.w / 2, y: r.y + 14, 'text-anchor': 'middle' });
+      label.textContent = route.label; $('edges').append(label);
+    }
   }
   $('minimap').append(svg('rect', { id: 'map-view', fill: 'var(--green)', 'fill-opacity': '.06', stroke: 'var(--orange)', 'stroke-width': 10 }));
   function renderDetail() {
     const n = nodes.get(state.selected), content = $('detail-content'); content.replaceChildren();
     content.append(el('small', '', types[n.type]), el('h2', '', n.title), el('p', 'detail-intro', n.detail));
     if (n.reason) content.append(el('p', 'detail-intro', (n.date ? n.date + ' · ' : '') + '原因：' + n.reason));
+    const relations = D.nodes.flatMap(a => a.links.filter(l => a.id === n.id || l.target === n.id).map(l => ({ id: a.id === n.id ? l.target : a.id, label: l.label, outgoing: a.id === n.id })));
+    if (relations.length) {
+      const section = el('section', 'sources relations'); section.append(el('h3', '', '关联'));
+      for (const r of relations) { const b = el('button', '', (r.outgoing ? '→ ' : '← ') + nodes.get(r.id).title + (r.label ? ' · ' + r.label : '')); b.onclick = () => openNode(r.id); section.append(b); }
+      content.append(section);
+    }
     const tags = el('div', 'tags'); for (const t of n.tags) tags.append(el('span', 'tag', t)); content.append(tags);
     const sources = el('section', 'sources'); sources.append(el('h3', '', '继续看来源'));
     for (const s of n.sources) { const a = el('a', '', s.path + (s.line ? ':' + s.line : '') + ' ↗'); a.href = D.sourceBase + '/' + s.path.split('/').map(encodeURIComponent).join('/') + (s.line ? '#L' + s.line : ''); a.target = '_blank'; a.rel = 'noopener'; sources.append(a); }
@@ -335,7 +443,7 @@ function browser() {
     $('close-detail').focus({ preventScroll: true });
   }
   $('close-detail').onclick = () => { closeDetail(); if (!mobile()) setView(state.view); };
-  $('fit-all').onclick = () => setView('all'); $('zoom-in').onclick = () => zoom(state.z * 1.22); $('zoom-out').onclick = () => zoom(state.z / 1.22); $('actual-size').onclick = () => zoom(1);
+  $('fit-all').onclick = () => setView(null); $('zoom-in').onclick = () => zoom(state.z * 1.22); $('zoom-out').onclick = () => zoom(state.z / 1.22); $('actual-size').onclick = () => zoom(1);
   $('theme-toggle').onclick = () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; };
   vp.addEventListener('wheel', e => { e.preventDefault(); const r = vp.getBoundingClientRect(); if (e.ctrlKey || e.metaKey) zoom(state.z * Math.exp(-e.deltaY * .008), e.clientX - r.left, e.clientY - r.top); else { state.x -= e.deltaX; state.y -= e.deltaY; fitPending = false; draw(); } }, { passive: false });
   let gesture;
@@ -343,7 +451,7 @@ function browser() {
   vp.addEventListener('pointermove', e => { if (!gesture || gesture.id !== e.pointerId) return; const dx = e.clientX - gesture.x, dy = e.clientY - gesture.y; if (Math.hypot(dx, dy) > 5) gesture.moved = true; if (gesture.moved) { state.x = gesture.tx + dx; state.y = gesture.ty + dy; fitPending = false; vp.classList.add('dragging'); draw(); } });
   vp.addEventListener('pointerup', e => { if (!gesture || gesture.id !== e.pointerId) return; const g = gesture; gesture = null; vp.classList.remove('dragging'); if (!g.moved && g.node) openNode(g.node); });
   vp.addEventListener('pointercancel', () => { gesture = null; vp.classList.remove('dragging'); });
-  document.addEventListener('keydown', e => { if (e.target.closest('input,textarea') || $('feedback-dialog').open) return; if (e.key === 'Escape') { closeDetail(); setView(state.view); } if (e.key === '0') setView('all'); if (e.key === '+' || e.key === '=') zoom(state.z * 1.22); if (e.key === '-') zoom(state.z / 1.22); if (document.activeElement === vp && e.key.startsWith('Arrow')) { const delta = { ArrowLeft: [80, 0], ArrowRight: [-80, 0], ArrowUp: [0, 80], ArrowDown: [0, -80] }[e.key]; if (delta) { e.preventDefault(); state.x += delta[0]; state.y += delta[1]; fitPending = false; draw(); } } });
+  document.addEventListener('keydown', e => { if (e.target.closest('input,textarea') || $('feedback-dialog').open) return; if (e.key === 'Escape') { closeDetail(); setView(state.view); } if (e.key === '0') setView(null); if (e.key === '+' || e.key === '=') zoom(state.z * 1.22); if (e.key === '-') zoom(state.z / 1.22); if (document.activeElement === vp && e.key.startsWith('Arrow')) { const delta = { ArrowLeft: [80, 0], ArrowRight: [-80, 0], ArrowUp: [0, 80], ArrowDown: [0, -80] }[e.key]; if (delta) { e.preventDefault(); state.x += delta[0]; state.y += delta[1]; fitPending = false; draw(); } } });
   $('search').addEventListener('input', () => {
     const q = $('search').value.trim().toLocaleLowerCase(), box = $('search-results'); box.replaceChildren(); box.hidden = !q; $('search').setAttribute('aria-expanded', String(!!q)); if (!q) return;
     const found = D.nodes.filter(n => [n.title, n.summary, n.detail, n.reason || '', ...n.tags].join(' ').toLocaleLowerCase().includes(q));
@@ -385,8 +493,8 @@ function browser() {
   $('select-copy-text').onclick = () => { $('copy-text').focus(); $('copy-text').select(); };
   $('copy-text').addEventListener('copy', () => { state.copied = state.changed; toast('反馈已复制'); });
   window.addEventListener('beforeunload', e => { if (allFeedback().length && state.copied !== state.changed) { e.preventDefault(); e.returnValue = ''; } });
-  new ResizeObserver(() => { if (mobile()) return; if (fitPending) fitRect(state.view === 'all' ? { x: 0, y: 0, w: D.width, h: D.height } : D.regions.find(s => s.id === state.view)); else draw(); }).observe(vp);
-  setView('all');
+  new ResizeObserver(() => { if (mobile()) return; if (fitPending) setView(state.view); else draw(); }).observe(vp);
+  setView(D.regions[0].id);
 }
 
 function options(args) {

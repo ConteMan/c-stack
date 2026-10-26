@@ -86,11 +86,13 @@
       "id": "stable-update",
       "kind": "behavior",
       "request": "只按检查结果更新已有概览。",
-      "input": "检查提示 src/catalog.js 改动影响 catalog；purpose 和 choice 不受影响。已有卡片顺序 purpose、catalog、choice。",
+      "input": "检查提示 src/catalog.js 改动影响 catalog；purpose 和 choice 不受影响。已有卡片顺序 purpose、catalog、choice。 数据主线含六张 flow 卡片。",
       "must_preserve": [
         "保留已有 ID 与顺序",
         "先读受影响来源再改",
-        "重新 build 与 check"
+        "重新 build 与 check",
+        "flow 按顺序单行横排",
+        "连线不穿过非端点卡片，无法避开时在详情保留关联"
       ],
       "must_not": [
         "重写无关卡片",
@@ -98,7 +100,8 @@
         "宣称未运行的验证通过"
       ],
       "should_improve": [
-        "只修改受影响卡片及状态"
+        "只修改受影响卡片及状态",
+        "首屏标题实际渲染至少约 12px，整图适应由用户触发"
       ]
     },
     {
