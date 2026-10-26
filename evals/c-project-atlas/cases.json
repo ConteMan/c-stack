@@ -122,6 +122,25 @@
       "should_improve": [
         "解释概念并降低卡片密度"
       ]
+    },
+    {
+      "id": "post-merge-rebuild",
+      "kind": "behavior",
+      "request": "纸园项目 squash 合并后，检查提示 revision-unavailable，修复项目概览。",
+      "input": "docs/atlas.md 内容和来源未变，HTML revision 来自已被 squash 的分支提交。当前在主分支，已授权更新并提交概览产物。",
+      "must_preserve": [
+        "说明旧 revision 不再是 HEAD 祖先，当前无法计算提交影响",
+        "在合并后的主分支重新 build、check，把 HTML 单独提交",
+        "报告全部警告，说明 HTML 提交后的 new-commits 且 affected 为空是预期"
+      ],
+      "must_not": [
+        "擅自改变 revision 机制或自动回退基准",
+        "为了清除 new-commits 反复重建提交",
+        "无依据改写卡片或历史事实"
+      ],
+      "should_improve": [
+        "交付可追溯的新快照并说明恢复后的检查结果"
+      ]
     }
   ]
 }
