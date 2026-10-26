@@ -96,7 +96,7 @@ sources: docs/decisions.md:3
 - `missing-status`：没有 `#status` 分区。
 - `stale-html`：产物缺失、无效或 `sourceHash`／格式版本不匹配。
 - `new-commits`：概览 revision 后 HEAD 又有提交；列出数量，并用这段历史中的改动文件列出“被引用且改动的文件 → 卡片 ID”。中间改动后又还原的文件仍会列出，未引用文件不会映射到卡片。
-- `revision-unavailable`：历史不全、revision 无效或非 HEAD 祖先，不能计算影响；补齐历史并重建。
+- `revision-unavailable`：历史不全、revision 无效或非 HEAD 祖先，不能计算影响；缺失历史时先补齐。目标项目使用 squash 或 rebase 方式合并时，在合并后的主分支重新 `build`、`check` 并把 HTML 单独提交；也可留待下一次概览更新一起完成，但重建前影响检测不可用。HTML 提交后出现 `new-commits` 且 `affected` 为空是预期，不需为清除此提示反复重建。
 
 JSON 输出包含 `errors`、`warnings`；每项有 `code` 和 `message`，卡片问题另有 `card`、`line`，提交警告另有 `count`、`affected: [{path,cards}]`。语法错误按遇到的第一个错误报告；成功解析后收集全部图、来源和密度问题。该检查不检测所有未提交实现变化，不证明事实、因果或计划正确。
 

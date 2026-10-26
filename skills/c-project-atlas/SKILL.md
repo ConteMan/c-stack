@@ -4,7 +4,7 @@ description: 从整体到局部生成或更新项目概览、项目地图和可�
 license: MIT
 metadata:
   author: ConteMan
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # 项目概览画布
@@ -42,6 +42,8 @@ metadata:
 先运行 `check`，阅读新增提交数、改动的来源文件与受影响卡片；再结合用户反馈核对相关材料。仅修改受影响卡片和「现状与决策」，不重新生成整份内容。
 
 保留已有卡片 ID 和顺序；新卡追加在所在分区末尾。删除卡片时说明理由，并修复指向它的连线。只更新文字不会改变布局；增删卡片或分区可能使后续分区移动。完成后重新 `build`、`check`。
+
+目标项目使用 squash 或 rebase 方式合并时，概览记录的分支 revision 可能不再是主分支 HEAD 的祖先，`check` 会给出 `revision-unavailable`，无法计算后续提交影响。合并后在主分支重新 `build`、`check`，把 HTML 单独提交；也可在下一次概览更新时一起完成，但重建前要明确说明影响检测不可用。单独提交 HTML 后出现 `new-commits` 且 `affected` 为空是预期，不必反复重建来消除这一警告。
 
 ## 处理反馈
 

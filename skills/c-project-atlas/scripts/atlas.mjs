@@ -173,7 +173,7 @@ export function inspect(ctx, { artifact = true } = {}) {
           const affected = [...new Set(data.cards.flatMap(c => c.sources.map(s => s.path)))].filter(p => changed.includes(p)).map(p => ({ path: p, cards: data.cards.filter(c => c.sources.some(s => s.path === p)).map(c => c.id) }));
           warnings.push({ ...issue('new-commits', `${count} commits since overview revision`), count, affected });
         }
-      } catch { warnings.push(issue('revision-unavailable', 'overview revision unavailable or not an ancestor of HEAD; fetch history and rebuild')); }
+      } catch { warnings.push(issue('revision-unavailable', 'overview revision unavailable or not an ancestor of HEAD; fetch missing history; after squash/rebase merge, run build on the main branch and commit HTML separately (or rebuild with the next overview update)')); }
     }
   }
   return { errors, warnings };
@@ -541,4 +541,13 @@ export function main(args = process.argv.slice(2)) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = main();
+export function isMain(entry = process.argv[1]) {
+  if (!entry) return false;
+  const resolve = file => {
+    try { return fs.realpathSync(file); }
+    catch { return path.resolve(file); }
+  };
+  return resolve(entry) === resolve(fileURLToPath(import.meta.url));
+}
+
+if (isMain()) process.exitCode = main();

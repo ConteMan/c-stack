@@ -7,7 +7,7 @@ ConteMan 长期维护的 Agent Skills：把真实工作中反复有效的方法�
 | 技能 | 用途 | 状态 |
 |---|---|---|
 | [c-technical-writing](skills/c-technical-writing/SKILL.md) | 撰写、改写和审查技术文档；优先保留语义，再改善结构和措辞 | 初版，待真实任务评估 |
-| [c-project-atlas](skills/c-project-atlas/SKILL.md) | 用 Markdown 维护项目全貌、主线、现状与决策，由零依赖 CLI 生成主线横排、首屏可读的离线批注画布 | 初版，脚本与浏览器回归；模型行为待评估 |
+| [c-project-atlas](skills/c-project-atlas/SKILL.md) | 用 Markdown 维护项目全貌、主线、现状与决策，由零依赖 CLI 生成主线横排、首屏可读的离线批注画布；支持软链调用，说明 squash/rebase 后的重建流程 | 初版，脚本与浏览器回归；模型行为待评估 |
 
 ## 使用
 

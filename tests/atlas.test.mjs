@@ -6,7 +6,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parse, context, inspect, layout, readingCamera, render, readArtifact, feedbackText, feedback } from '../skills/c-project-atlas/scripts/atlas.mjs';
+import { parse, context, inspect, layout, readingCamera, render, readArtifact, feedbackText, feedback, isMain } from '../skills/c-project-atlas/scripts/atlas.mjs';
 
 const cli = fileURLToPath(new URL('../skills/c-project-atlas/scripts/atlas.mjs', import.meta.url));
 // Fictional project. No production data, accounts, or network services.
@@ -153,6 +153,21 @@ test('build is byte identical; commit date, short revision and source hash are e
   assert.deepEqual(layout(changed).nodes.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })), layout(parse(source)).nodes.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })));
 });
 
+test('non-ancestor revision explains squash/rebase recovery and rebuilding restores history checks', t => {
+  const f = fixture(t);
+  f.git('checkout', '-qb', 'topic');
+  fs.writeFileSync(path.join(f.root, 'other.txt'), 'topic work');
+  f.git('add', 'other.txt'); f.git('commit', '-qm', 'Topic work');
+  assert.equal(f.run('build').status, 0);
+  f.git('checkout', '-q', '--detach', 'HEAD~1');
+  const result = JSON.parse(f.run('check', '--json').stdout);
+  const warning = result.warnings.find(w => w.code === 'revision-unavailable');
+  assert.ok(warning); assert.match(warning.message, /squash\/rebase/);
+  assert.match(warning.message, /build on the main branch.*commit HTML separately/);
+  assert.equal(f.run('build').status, 0);
+  assert.equal(f.run('check', '--strict').status, 0);
+});
+
 test('renderer escapes untrusted content and embeds executable JavaScript, no external resource tags', t => {
   const f = fixture(t); const ctx = f.ctx(); ctx.data.cards[0].detail = '</script><img src=x onerror=alert(1)>';
   const html = render(ctx.data); assert.ok(!html.includes('<img src=x')); assert.ok(!/<(?:script|link|img)[^>]+(?:src|href)=/i.test(html));
@@ -179,6 +194,37 @@ test('CLI diagnoses bad commands and options and works from project subdirectori
   assert.equal(f.run('--help').status, 0);
   for (const args of [['oops'], ['build', '--src'], ['check', '--oops'], ['check', 'unexpected']]) assert.equal(f.run(...args).status, 1);
   const r = spawnSync(process.execPath, [cli, 'build'], { cwd: path.join(f.root, 'docs'), encoding: 'utf8' }); assert.equal(r.status, 0);
+});
+
+test('CLI check runs through file and chained directory symlinks with correct exit codes', t => {
+  const f = fixture(t);
+  const links = path.join(f.root, 'links'); fs.mkdirSync(links);
+  const fileLink = path.join(links, 'atlas.mjs');
+  fs.symlinkSync(cli, fileLink);
+  const library = path.join(links, 'library'), client = path.join(links, 'client');
+  fs.symlinkSync(path.dirname(path.dirname(cli)), library, 'dir');
+  fs.symlinkSync(library, client, 'dir');
+  for (const entry of [fileLink, path.join(client, 'scripts/atlas.mjs')]) {
+    const run = (...args) => spawnSync(process.execPath, [entry, 'check', '--json', ...args], { cwd: f.root, encoding: 'utf8' });
+    let r = run(); assert.equal(r.status, 0); assert.equal(r.stderr, '');
+    assert.notEqual(r.stdout.trim(), '', 'symlink invocation must execute check');
+    assert.deepEqual(JSON.parse(r.stdout).errors, []);
+    assert.ok(JSON.parse(r.stdout).warnings.some(w => w.code === 'stale-html'));
+    assert.equal(run('--strict').status, 1);
+    f.write(source.replace('links: catalog', 'links: absent'));
+    r = run(); assert.equal(r.status, 1);
+    assert.equal(JSON.parse(r.stdout).errors[0].code, 'unknown-link');
+    f.write(source);
+  }
+});
+
+test('entry detection falls back to resolved paths when realpath fails, and imports stay inert', t => {
+  assert.equal(isMain(cli), true); assert.equal(isMain(''), false);
+  t.mock.method(fs, 'realpathSync', () => { throw new Error('path unavailable'); });
+  assert.equal(isMain(cli), true);
+  assert.equal(isMain(path.join(path.dirname(cli), 'other.mjs')), false);
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', `import(${JSON.stringify(cli)})`], { encoding: 'utf8' });
+  assert.equal(r.status, 0); assert.equal(r.stdout, ''); assert.equal(r.stderr, '');
 });
 
 // Fictional library workflow, with enough cards and feedback edges to exercise routing.
