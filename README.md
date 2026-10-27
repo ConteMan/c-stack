@@ -7,7 +7,7 @@ ConteMan 长期维护的 Agent Skills：把真实工作中反复有效的方法�
 | 技能 | 用途 | 状态 |
 |---|---|---|
 | [c-technical-writing](skills/c-technical-writing/SKILL.md) | 撰写、改写和审查技术文档；优先保留语义，再改善结构和措辞 | 初版，待真实任务评估 |
-| [c-project-atlas](skills/c-project-atlas/SKILL.md) | v0.3：六入口主干＋树/流程/时间线/分组，零依赖离线批注画布；支持八种显示组合、关联高亮、文字边界回归、旧反馈 ID 映射与来源影响检查 | 脚本与浏览器回归，模型行为另列证据 |
+| [c-project-atlas](skills/c-project-atlas/SKILL.md) | v0.3：六入口主干＋树/流程/时间线/分组，零依赖离线批注画布；支持八种显示组合、关联高亮与附属元素淡出、文字边界回归、旧反馈 ID 映射与来源影响检查 | 脚本与浏览器回归，模型行为另列证据 |
 
 ## 使用
 

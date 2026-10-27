@@ -45,8 +45,21 @@ export function measureTextGeometry() {
     const style=getComputedStyle(element.querySelector('circle'));
     const a=luminance(style.stroke),b=luminance(style.fill),contrast=(Math.max(a,b)+.05)/(Math.min(a,b)+.05);markerStyles.push({id,stroke:style.stroke,fill:style.fill,width:parseFloat(style.strokeWidth),contrast});
   }
+  const opacityMismatches=[],unownedText=[];
+  const effectiveOpacity=element=>{let value=1;for(let e=element;e;e=e.parentElement){value*=Number(getComputedStyle(e).opacity);if(e===world)break}return value};
+  const state=window.projectAtlas.getState(),highlighted=new Set(state.association.highlighted);
+  if(state.association.focus){
+    for(const element of world.querySelectorAll('text,[data-decoration-owner]')){
+      const owner=element.dataset.decorationOwner||element.closest('[data-node]')?.dataset.node||(element.dataset.textRole==='date'?element.dataset.textId:null);
+      const node=owner?world.querySelector(`[data-node="${owner}"]`):null;
+      if(!node){if(element.tagName.toLowerCase()==='text')unownedText.push({role:element.dataset.textRole,id:element.dataset.textId});continue}
+      if(highlighted.has(owner))continue;
+      const actual=effectiveOpacity(element),expected=effectiveOpacity(node);
+      if(Math.abs(actual-expected)>1e-6)opacityMismatches.push({owner,role:element.dataset.textRole||element.tagName,text:element.textContent,actual,expected});
+    }
+  }
   const crossSegments=document.querySelectorAll('.cross,[data-cross],[data-cross-from],#cross-arrow').length+scene.edges.filter(e=>e.kind==='cross').length;
-  return {pass:!overlaps.length && !outside.length && !untracked.length && !reservationOverflow.length&&!markerOverlaps.length&&!markerOutside.length&&!crossSegments&&markerStyles.every(s=>s.stroke!=='none'&&s.stroke!==s.fill&&s.width>=1.5&&s.contrast>=4.5),
+  return {pass:!overlaps.length && !outside.length && !untracked.length && !reservationOverflow.length&&!markerOverlaps.length&&!markerOutside.length&&!crossSegments&&!opacityMismatches.length&&!unownedText.length&&markerStyles.every(s=>s.stroke!=='none'&&s.stroke!==s.fill&&s.width>=1.5&&s.contrast>=4.5),
     textCount:texts.length, roles:[...new Set(texts.map(t=>t.role))], overlaps, outside,
-    untracked, reservationOverflow,markerOverlaps,markerOutside,markerStyles,crossSegments};
+    untracked, reservationOverflow,markerOverlaps,markerOutside,markerStyles,crossSegments,opacityMismatches,unownedText};
 }

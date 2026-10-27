@@ -10,7 +10,7 @@ import { associationState } from './associations.mjs';
 export { associationState } from './associations.mjs';
 export { layoutTree as layout } from './layout.mjs';
 export const FORMAT = 2;
-export const RENDERER = '0.3.0-r3';
+export const RENDERER = '0.3.0-r4';
 export const BRANCHES = {position:'定位',features:'功能模块',technology:'技术栈',versions:'版本',planning:'规划',decisions:'决策与待定'};
 const ID=/^[a-z][a-z0-9-]*$/;
 const TYPES=['fact','done','next','decision','open'];

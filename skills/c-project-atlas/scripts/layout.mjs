@@ -21,14 +21,14 @@ function nodeBlock(n,side,minWidth=0){const b=emptyBlock(),s=size(n);s.w=Math.ma
   const children=n.children.map((c,i)=>nodeBlock(c,side,side>0&&i===0?s.w+2:0));let x=left;
   children.forEach((c,i)=>{c.nodes[0].align='start';const dx=x-c.bounds.x1,dy=top-c.bounds.y1;put(b,c,dx,dy);if(i){const prev=b.nodes.find(q=>q.n.id===n.children[i-1].id),cur=b.nodes.find(q=>q.n.id===n.children[i].id);const x1=prev.x+prev.w/2+4,x2=cur.x-cur.w/2-4;b.edges.push({x1,y1:prev.y,x2,y2:cur.y,kind:'flow',depth:3})}x+=c.bounds.w+33});
   if(n.subtitle)b.decor.push({kind:'subtitle',node:n.id,x:left+14,y:s.h/2+15,text:n.subtitle,width:textWidth(n.subtitle,11)});
-  const cb=bounds(b);b.frames.push({id:n.id+':flow',members:b.nodes.map(q=>q.n.id),x:cb.x1-12,y:cb.y1-12,w:cb.w+24,h:cb.h+24,kind:'flow'});
+  const cb=bounds(b);b.frames.push({id:n.id+':flow',owner:n.id,members:b.nodes.map(q=>q.n.id),x:cb.x1-12,y:cb.y1-12,w:cb.w+24,h:cb.h+24,kind:'flow'});
  }else if(mode==='timeline'){
   const children=n.children.map(c=>nodeBlock(c,side)),total=children.reduce((a,c)=>a+c.bounds.h,0)+(children.length-1)*30;let y=-total/2;const bar=s.w/2+gap,ix=bar+91;
-  b.decor.push({kind:'line',x:bar,y:-total/2+18,y2:total/2-18});
-  for(const c of children){const dy=y-c.bounds.y1,dx=ix-c.bounds.x1;put(b,c,dx,dy);const cn=c.nodes[0];const cy=dy+cn.y;b.decor.push({kind:'date',node:c.nodes[0].n.id,x:bar+14,y:cy+4,text:c.nodes[0].n.date?.slice(5)||'未记录',width:65});b.decor.push({kind:'dot',x:bar,y:cy});y+=c.bounds.h+30}b.edges.push({x1:s.w/2,y1:0,x2:bar,y2:0,depth:2,kind:'curve'});
+  b.decor.push({kind:'line',node:n.id,x:bar,y:-total/2+18,y2:total/2-18});
+  for(const c of children){const dy=y-c.bounds.y1,dx=ix-c.bounds.x1;put(b,c,dx,dy);const cn=c.nodes[0];const cy=dy+cn.y;b.decor.push({kind:'date',node:c.nodes[0].n.id,x:bar+14,y:cy+4,text:c.nodes[0].n.date?.slice(5)||'未记录',width:65});b.decor.push({kind:'dot',node:c.nodes[0].n.id,x:bar,y:cy});y+=c.bounds.h+30}b.edges.push({x1:s.w/2,y1:0,x2:bar,y2:0,depth:2,kind:'curve'});
  }else if(mode==='group'){
   const groups=new Map();for(const c of n.children){const k=c.group||'';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(nodeBlock(c,side))}const groupBlocks=[];
-  for(const [name,items] of groups){const gb=emptyBlock();let y=name?35:12;for(const c of items){put(gb,c,18-c.bounds.x1,y-c.bounds.y1);y+=c.bounds.h+13}const cb=bounds(gb);gb.frames.push({id:n.id+':group:'+groupBlocks.length,members:gb.nodes.map(q=>q.n.id),x:0,y:0,w:Math.max(cb.x2+12,name?textWidth(name,10)+28:0),h:cb.y2+12,label:name,kind:'group'});gb.bounds=bounds(gb);groupBlocks.push(gb)}
+  for(const [name,items] of groups){const gb=emptyBlock();let y=name?35:12;for(const c of items){put(gb,c,18-c.bounds.x1,y-c.bounds.y1);y+=c.bounds.h+13}const cb=bounds(gb);gb.frames.push({id:n.id+':group:'+groupBlocks.length,owner:n.id,members:gb.nodes.map(q=>q.n.id),x:0,y:0,w:Math.max(cb.x2+12,name?textWidth(name,10)+28:0),h:cb.y2+12,label:name,kind:'group'});gb.bounds=bounds(gb);groupBlocks.push(gb)}
   const total=groupBlocks.reduce((a,c)=>a+c.bounds.h,0)+(groupBlocks.length-1)*15;let y=-total/2;for(const c of groupBlocks){const dx=Math.max(s.w/2,n.subtitle?-s.w/2+14+textWidth(n.subtitle,11):0)+gap-c.bounds.x1,dy=y-c.bounds.y1;put(b,c,dx,dy);b.edges.push({x1:s.w/2,y1:0,x2:dx,y2:dy+c.bounds.h/2,depth:2,kind:'curve'});y+=c.bounds.h+15}
   if(n.subtitle)b.decor.push({kind:'subtitle',node:n.id,x:-s.w/2+14,y:s.h/2+15,text:n.subtitle,width:textWidth(n.subtitle,11)});
  }else{
