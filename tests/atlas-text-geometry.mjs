@@ -34,7 +34,19 @@ export function measureTextGeometry() {
     for (let j = i + 1; j < texts.length; j++) if (overlap(a, texts[j]))
       overlaps.push([a, texts[j]]);
   }
-  return {pass:!overlaps.length && !outside.length && !untracked.length && !reservationOverflow.length,
+  const markerOverlaps=[],markerOutside=[],markerStyles=[];
+  const luminance=color=>{const rgb=color.match(/[\d.]+/g)?.slice(0,3).map(Number);if(!rgb||rgb.length!==3)return NaN;return rgb.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0)};
+  for(const element of world.querySelectorAll('[data-association-mark]')){
+    const id=element.dataset.associationMark,box=element.getBBox(),m=inverse.multiply(element.getScreenCTM()),p=new DOMPoint(box.x,box.y).matrixTransform(m),r={x:p.x,y:p.y,w:box.width,h:box.height};
+    const reserved=scene.markers.find(q=>q.node===id);
+    if(!reserved)markerOutside.push({id,reason:'untracked'});
+    else for(const frame of reserved.frames)if(!within(r,frames.get(frame)))markerOutside.push({id,frame});
+    for(const t of texts)if(overlap(r,t))markerOverlaps.push([id,t.id]);
+    const style=getComputedStyle(element.querySelector('circle'));
+    const a=luminance(style.stroke),b=luminance(style.fill),contrast=(Math.max(a,b)+.05)/(Math.min(a,b)+.05);markerStyles.push({id,stroke:style.stroke,fill:style.fill,width:parseFloat(style.strokeWidth),contrast});
+  }
+  const crossSegments=document.querySelectorAll('.cross,[data-cross],[data-cross-from],#cross-arrow').length+scene.edges.filter(e=>e.kind==='cross').length;
+  return {pass:!overlaps.length && !outside.length && !untracked.length && !reservationOverflow.length&&!markerOverlaps.length&&!markerOutside.length&&!crossSegments&&markerStyles.every(s=>s.stroke!=='none'&&s.stroke!==s.fill&&s.width>=1.5&&s.contrast>=4.5),
     textCount:texts.length, roles:[...new Set(texts.map(t=>t.role))], overlaps, outside,
-    untracked, reservationOverflow};
+    untracked, reservationOverflow,markerOverlaps,markerOutside,markerStyles,crossSegments};
 }

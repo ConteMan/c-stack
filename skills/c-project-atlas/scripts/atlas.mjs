@@ -6,9 +6,11 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { layoutTree } from './layout.mjs';
+import { associationState } from './associations.mjs';
+export { associationState } from './associations.mjs';
 export { layoutTree as layout } from './layout.mjs';
 export const FORMAT = 2;
-export const RENDERER = '0.3.0-r2';
+export const RENDERER = '0.3.0-r3';
 export const BRANCHES = {position:'定位',features:'功能模块',technology:'技术栈',versions:'版本',planning:'规划',decisions:'决策与待定'};
 const ID=/^[a-z][a-z0-9-]*$/;
 const TYPES=['fact','done','next','decision','open'];
@@ -140,8 +142,6 @@ export function inspect(ctx, { artifact = true } = {}) {
     if (sentences > 3 || han > 120) warnings.push(issue('dense-detail', `detail has ${sentences} sentences / ${han} Han characters (limit 3 / 120)`, c));
   }
   for (const type of ['done','next','decision','open']) if (!data.nodes.some(n => n.type===type)) warnings.push(issue('missing-state', `no ${type} node; explicitly record unknown plans or open questions`));
-  const seenDiagnostics=new Set();
-  for(const expanded of [undefined,data.nodes.map(n=>n.id)]){const scene=layoutTree(data.root,{expanded,view:data.view});for(const d of scene.diagnostics){const key=d.code+d.node+d.message;if(!seenDiagnostics.has(key)){seenDiagnostics.add(key);warnings.push({...d,line:data.nodes.find(n=>n.id===d.node)?.startLine})}}}
   if (artifact) {
     let built;
     try { built = readArtifact(fs.readFileSync(output, 'utf8')); } catch { /* warning below */ }
@@ -196,7 +196,7 @@ export function feedback(text,ctx){
 export function render(data){
  const template=fs.readFileSync(new URL('../assets/page.html',import.meta.url),'utf8');
  const json=JSON.stringify(data).replace(/</g,'\\u003c');
- return template.replace('__ATLAS_DATA__',()=>json).replace('__ATLAS_LAYOUT__',()=>layoutTree.toString()).replace('__ATLAS_VIEW__',()=>viewOptions.toString()).replace('__ATLAS_FEEDBACK__',()=>feedbackText.toString());
+ return template.replace('__ATLAS_DATA__',()=>json).replace('__ATLAS_LAYOUT__',()=>layoutTree.toString()).replace('__ATLAS_ASSOCIATIONS__',()=>associationState.toString()).replace('__ATLAS_VIEW__',()=>viewOptions.toString()).replace('__ATLAS_FEEDBACK__',()=>feedbackText.toString());
 }
 function options(args) {
   const result = { src: 'docs/atlas.md', out: 'docs/project-overview.html', json: false, strict: false, positional: [] };

@@ -94,7 +94,7 @@ decision 必须有 date、date_kind 和 reason。日期是提交记录时用 rec
 
 默认展开到第二层；直接子节点数字标记用实心（折叠）与描边（展开）区分。全部朝右时所有子项在父项右侧；两侧模式平衡分支。内容只描述树与形态，不写坐标。
 
-有明确证据的跨分支关系才写 `{"target":"catalog","label":"保持本地登记","kind":"cross"}`；label 必须非空。cross 默认隐藏，仅选中/悬停任一端时显示，详情可双向跳转。仅为 cross 路由避障；找不到清晰路径给 `unroutable-cross` 诊断，详情关系保留。父子线随所选曲线/直角变化，流程内部为短箭头。
+有明确证据的跨分支关系才写 `{"target":"catalog","label":"保持本地登记","kind":"cross"}`；label 必须非空，只在详情呈现。画布不绘制 cross 线段或关系标签，也不做关系路由。两端均显示无文字的小关联标记；选中或悬停任一端时高亮自身与直接关联节点，其余节点淡出。临时展开关联节点的祖先，移开/取消选择后恢复读者原有展开状态。悬停有关联的节点优先预览，移开回到已选节点；没有 cross 的节点不触发淡出。详情仍列出全部关系、标签并支持双向跳转。父子线随曲线/直角选项变化，流程内部保留短箭头。
 
 ## 构建与检查
 
@@ -102,7 +102,7 @@ Node.js 20+ 与 Git，零依赖。构建身份包含源 SHA-256、格式 2、渲
 
 check 遍历全树。错误包括语法/字段、非法六分支、ID/别名冲突、日期类型、缺来源/行号越界/越界软链、不可解析提交、关系目标缺失。错误退出 1，build 不覆盖有效旧产物。
 
-警告：`dense-detail`；`missing-state`（done/next/decision/open 某类缺失）；`unroutable-cross`（无路径）与 `cross-label-unplaced`（标签空间不足）；`stale-html`（源/格式/渲染版本不符）；`new-commits`（含 count 与 affected 路径 → nodes）；`revision-unavailable`。默认警告退出 0，`--strict` 退出 1。检查不会证明事实或日期原因正确，也不会自动联网跟踪 Issue 状态。
+警告：`dense-detail`；`missing-state`（done/next/decision/open 某类缺失）；`stale-html`（源/格式/渲染版本不符）；`new-commits`（含 count 与 affected 路径 → nodes）；`revision-unavailable`。默认警告退出 0，`--strict` 退出 1。检查不会证明事实或日期原因正确，也不会自动联网跟踪 Issue 状态。
 
 合并后若 squash/rebase 使 revision 不是主分支祖先，影响检测暂不可用。在已授权的主分支重建并单独提交 HTML，或在下一次内容更新处理。HTML 提交之后 new-commits=1 且 affected 为空是预期，不要循环重建。
 
