@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { layoutTree } from './layout.mjs';
 export { layoutTree as layout } from './layout.mjs';
 export const FORMAT = 2;
-export const RENDERER = '0.3.0';
+export const RENDERER = '0.3.0-r2';
 export const BRANCHES = {position:'定位',features:'功能模块',technology:'技术栈',versions:'版本',planning:'规划',decisions:'决策与待定'};
 const ID=/^[a-z][a-z0-9-]*$/;
 const TYPES=['fact','done','next','decision','open'];
@@ -63,9 +63,10 @@ export function parse(text) {
     const mm=next&&/^( *)<!-- atlas-meta (\{.*\}) -->$/.exec(next);
     if(!mm||mm[1]!==indent)fail(i+1,'node requires one adjacent JSON atlas-meta comment at matching indentation');
     let fields;try{fields=JSON.parse(mm[2])}catch{fail(i+1,'invalid metadata JSON')}
-    const allowed=['summary','detail','sources','commits','tags','links','type','date','date_kind','date_status','date_note','reason','layout','group','legacy_ids'];
+    const allowed=['subtitle','summary','detail','sources','commits','tags','links','type','date','date_kind','date_status','date_note','reason','layout','group','legacy_ids'];
     if(!object(fields)||Object.keys(fields).some(k=>!allowed.includes(k)))fail(i+1,'unknown metadata field; coordinates and arbitrary HTML are not supported');
-    for(const k of ['summary','detail','reason','date_note','group'])if(own(fields,k)&&(typeof fields[k]!=='string'||!fields[k].trim()))fail(i+1,`${k} must be nonempty text`);
+    for(const k of ['subtitle','summary','detail','reason','date_note','group'])if(own(fields,k)&&(typeof fields[k]!=='string'||!fields[k].trim()))fail(i+1,`${k} must be nonempty text`);
+    if(fields.subtitle&&/[\r\n]/.test(fields.subtitle))fail(i+1,'subtitle must be a single line');
     if(!fields.detail)fail(startLine,'detail required');
     for(const k of ['sources','commits','tags','legacy_ids'])if(own(fields,k)&&(!Array.isArray(fields[k])||fields[k].some(s=>typeof s!=='string'||!s.trim())))fail(i+1,`${k} must be a string array`);
     if(!fields.sources?.length)fail(startLine,'sources required for every node');
@@ -85,7 +86,7 @@ export function parse(text) {
   }
   if(!root||!root.children.length)fail(1,'a root and at least one fixed branch are required');
   const aliases=new Map();for(const n of nodes)for(const alias of n.legacy_ids){if(aliases.has(alias)||(ids.has(alias)&&alias!==n.id))fail(n.startLine,'ambiguous legacy ID');aliases.set(alias,n.id)}
-  for(const n of nodes){n.layout=n.layout||(n.parent?nodes.find(p=>p.id===n.parent).layout:'tree');if(n.layout==='timeline')for(const c of n.children)if(!c.date&&c.date_status!=='unknown')fail(c.startLine,'timeline child requires date/date_kind or date_status: unknown')}
+  for(const n of nodes){n.layout=n.layout||(n.parent?nodes.find(p=>p.id===n.parent).layout:'tree');if(n.subtitle&&!['flow','group'].includes(n.layout))fail(n.startLine,'subtitle requires a flow or group container');if(n.layout==='timeline')for(const c of n.children)if(!c.date&&c.date_status!=='unknown')fail(c.startLine,'timeline child requires date/date_kind or date_status: unknown')}
   return {project:meta.project||'',title:meta.title||root.title,view:meta.view||viewOptions(),root,nodes};
 }
 

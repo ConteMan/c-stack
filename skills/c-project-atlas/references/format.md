@@ -65,6 +65,7 @@ view: {"style":"default","edges":"curve","direction":"balanced"}
 | --- | --- |
 | detail | 必填非空字符串，最多三句、约 120 汉字；超量给密度警告 |
 | sources | 必填非空字符串数组，项目根相对文件路径，可附 `:正整数行号` |
+| subtitle | 可选单行非空副标题，仅允许 flow/group 容器，明确声明时显示；不自动推断用途 |
 | summary | 可选非空摘要，只在详情呈现 |
 | type | fact（默认）/ done / next / decision / open |
 | layout | tree（根默认）/ flow / timeline / group；容器的内部形态，下层可覆盖 |
@@ -88,6 +89,7 @@ decision 必须有 date、date_kind 和 reason。日期是提交记录时用 rec
 - tree 表达包含/细分；父子不自动代表因果。
 - flow 以子项顺序表示已核实的处理先后，水平从左向右，不折行。
 - timeline 用日期轴呈现版本/历史，unknown 明示缺口。
+- flow 区块以容器节点自身标题为唯一标题，步骤紧接其下并从左排开，不生成固定标签；需要副标题时显式写 `subtitle`。
 - group 按 group 字段组成区间；区间是分类，类型仍由 type 判定。
 
 默认展开到第二层；直接子节点数字标记用实心（折叠）与描边（展开）区分。全部朝右时所有子项在父项右侧；两侧模式平衡分支。内容只描述树与形态，不写坐标。
