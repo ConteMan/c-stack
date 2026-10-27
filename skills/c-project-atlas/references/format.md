@@ -1,125 +1,127 @@
-# 内容与反馈格式 v1
+# 内容格式 atlas/2
 
-首次生成、格式报错或需要扩展卡片时阅读。CLI 是严格的 Markdown 子集解析器，不是通用 YAML：未知字段、自由正文、任意 Markdown 围栏均报错，不默默忽略。
+这是受限 Markdown，不是通用 YAML/HTML。CLI 只读取本文定义的字段。UTF-8，允许 CRLF；未知字段、任意正文、坐标与非法层级均报错。
 
-## 文档结构
+## 结构
 
-````text
+```markdown
 ---
+schema: atlas/2
 project: paper-garden
-title: 项目概览
+title: 纸园项目概览
+view: {"style":"default","edges":"curve","direction":"balanced"}
 ---
 
-## 全貌 {#overview layout=grid}
+# 纸园 {#project}
+<!-- atlas-meta {"detail":"虚构的本地书目工具。","sources":["README.md:1"]} -->
 
-```card id=purpose
-title: 整理纸质书的借阅
-summary: 记录书在哪里、借给了谁。
-detail: |
-  这是一个虚构的本地书目工具。
-tags: 本地, 书目
-sources: README.md:1
-links: catalog "查询书目"
+## 定位 {#position}
+<!-- atlas-meta {"layout":"tree","detail":"用途与边界。","sources":["README.md"]} -->
+- 整理个人书目 {#purpose}
+<!-- atlas-meta {"detail":"记录书在哪里、借给了谁。","sources":["README.md:1"],"legacy_ids":["old-purpose"]} -->
+
+## 技术栈 {#technology}
+<!-- atlas-meta {"layout":"tree","detail":"本地文件与查询。","sources":["README.md"]} -->
+- 录入到查询 {#pipeline}
+<!-- atlas-meta {"layout":"flow","detail":"依次录入、保存与查询。","sources":["README.md"]} -->
+  - 录入 {#intake}
+  <!-- atlas-meta {"detail":"接收图书资料。","sources":["README.md"]} -->
+  - 保存 {#catalog}
+  <!-- atlas-meta {"detail":"保存本地书目。","sources":["README.md"]} -->
 ```
 
-## 数据主线 {#flow layout=flow}
+例子全为虚构，不能照抄为真实事实。可直接用 Markdown 看树；JSON 注释中的文字是纯文本，页面不执行 HTML。
 
-```card id=catalog
-title: 书目
-summary: 把录入的书保存下来。
-detail: 数据保存在本地。
-sources: src/catalog.js:2
-```
+根用一个 `# 标题 {#id}`。一级分支用 `##`，只允许下表；可省略，无内容时不凑分支。至少一个分支。不得增加第七分支或改名。下层用 `- 标题 {#id}`，每深入一级缩进两个空格。标题不解释 Markdown 强调或链接。ID 匹配 `[a-z][a-z0-9-]*`，全树唯一，`overall` 保留给整体意见。
 
-## 现状与决策 {#status layout=grid}
+| ID | 固定标题 |
+| --- | --- |
+| position | 定位 |
+| features | 功能模块 |
+| technology | 技术栈 |
+| versions | 版本 |
+| planning | 规划 |
+| decisions | 决策与待定 |
 
-```card id=choice
-type: decision
-title: 先做好本地书目
-summary: 暂时只支持单人使用。
-detail: 团队共享还没有实现。
-date: 2026-01-02
-reason: 先验证个人整理需求。
-sources: docs/decisions.md:3
-```
-````
+每个节点的下一行必须是单行 `<!-- atlas-meta {...} -->`，缩进与该节点相同；不允许跨层或跳层。来源范围是该节点标题/列表行到其元数据行，反馈不会把整棵子树当成一个可覆盖范围。
 
-以上名称、日期、路径与事实均为虚构示例；使用前替换为真实且允许保存的证据。实际文件不含最外层的 `text` 围栏。分区标题必须是 `## 标题 {#id layout=grid}` 或 `layout=flow`，属性顺序固定。
+## Frontmatter 与显示选项
 
-## 语法与字段
+`schema: atlas/2` 必填。`project` 可省略或为空，顶栏此时留空，不用图标或猜测名称补位；中心名称始终来自根标题。`title` 可省略，默认根标题。字符串可写纯文本或 JSON 双引号字符串。
 
-- UTF-8，可读 CRLF；frontmatter 从第一行 `---` 到下一行 `---`，只接受必填的 `project`、`title`。
-- 非空纯文本值保持字面意义；需要特殊开头或转义时用 JSON 双引号字符串。无 YAML 注释、别名、折叠、单引号解码或隐式类型转换；`#` 不是行尾注释。
-- 卡片用独占行的 ` ```card id=xxx ` 和 ` ``` ` 开闭（实际去掉两端空格）。卡片必须属于分区，每个分区至少一张卡。分区和卡片的 ID 分别唯一，匹配 `[a-z][a-z0-9-]*`；卡片 `overall` 保留给整体反馈。
-- 卡片必填：`title`、`summary`、`detail`、`sources`。可选：`tags`、`links`、`commits`、`type`、`date`、`reason`。字段不重复，不支持坐标、尺寸、HTML 或 CSS。
-- `detail: |` 后以两个空格缩进正文，保留换行；或用单行纯文本／JSON 字符串。内容作为纯文本显示，不解释 Markdown 或 HTML。
-- `tags`、`sources` 用半角／全角逗号分隔，或用 JSON 字符串数组。有空格的路径可直接写；路径中含逗号时必须用 JSON 数组，例如 `sources: ["docs/design notes.md:4", "src/catalog.js"]`。
-- `links: catalog "查询", shelf`：半角逗号分隔，每项是目标卡片 ID，可附 JSON 双引号标签。标签可含逗号或转义引号。可跨分区，无需另声明边。没有连线就省略 `links`。
-- `sources` 为项目根目录相对文件路径，末尾可附正整数行号；不接受绝对路径、URL、父目录跳转、反斜杠和越出根目录的符号链接。文件须存在，行号不可超出文件实际长度；空文件没有第 1 行。
+`view` 为严格 JSON 对象，三键均可省略；未设置时用默认值：
 
-- `commits` 可选，使用逗号分隔或 JSON 字符串数组，保存 7–40 位十六进制 Git 提交 ID，作为状态、日期和决定的历史证据。它不替代文件来源；本地历史必须能解析这些提交。页面显示提交 ID 供仓库历史定位，不自动联网。
+| 键 | 值 | 默认 |
+| --- | --- | --- |
+| style | default / mono | default |
+| edges | curve / orthogonal | curve |
+| direction | balanced / right | balanced |
 
-## 状态和决策
+不支持 YAML 的无引号对象键。读者可在“显示”菜单任意组合选项。浏览器以项目与根 ID 为键存储偏好；读取/写入失败退回源中的默认值。手机大纲仅应用样式；方向和线型不改大纲顺序。深色由系统偏好初始化，也可切换。
 
-`type` 默认 `fact`（用途、能力、边界）。`#status` 约定用于「现状与决策」；标题可以翻译，检测依据固定 ID。
+## 节点元数据
 
-| type | 表达 | 证据要求 |
-|---|---|---|
-| done | 已完成 | 已合入提交、关闭的 Issue、实现与文档 |
-| next | 进行中或下一步 | 区分已开工、批准计划和建议；没有计划就明确未定 |
-| decision | 已记录的关键决定 | 必须有有效 `date: YYYY-MM-DD` 和 `reason`；未知原因写“原因未记录” |
-| open | 悬而未决 | 已知未解决问题，或明确标注的推断性待确认问题 |
+| 字段 | 规则 |
+| --- | --- |
+| detail | 必填非空字符串，最多三句、约 120 汉字；超量给密度警告 |
+| sources | 必填非空字符串数组，项目根相对文件路径，可附 `:正整数行号` |
+| subtitle | 可选单行非空副标题，仅允许 flow/group 容器，明确声明时显示；不自动推断用途 |
+| summary | 可选非空摘要，只在详情呈现 |
+| type | fact（默认）/ done / next / decision / open |
+| layout | tree（根默认）/ flow / timeline / group；容器的内部形态，下层可覆盖 |
+| date | 有效 YYYY-MM-DD；提供时必须有 date_kind |
+| date_kind | decision / record / release / implementation / latest-merge |
+| date_status | 只允许 unknown，且不能同时出现 date；用于时间线未记录日期的项 |
+| date_note | 可选非空说明，用来区分决定与合入等日期口径 |
+| reason | decision 必填；原因缺失写“原因未记录” |
+| group | 分组区间名称；不改变节点的 type |
+| tags | 字符串数组 |
+| commits | 7–40 位十六进制 Git 提交 ID 数组，本地须能解析 |
+| legacy_ids | 旧 ID 数组；不能与其他节点或别名冲突，可包含自己的现 ID |
+| links | `{target, label?, kind?}` 数组；kind 只允许 cross，省略时仅在详情关联 |
 
-四类在内容工作流中都要考虑；CLI 只检查 `decision` 必填字段及缺少 `#status` 的警告，不代替证据或语义判断。不知道日期时先补证据，不能随便填写当前日期。
+decision 必须有 date、date_kind 和 reason。日期是提交记录时用 record/implementation/latest-merge，并在 date_note 说明，不能冒充决定或上线日期。timeline 的每个直接子项都须有 date/date_kind 或 `date_status:"unknown"`；没有日期的能力不得被凭空放入时间先后。列表顺序就是时间线阅读顺序，作者应核对日期后排序，unknown 项另标未记录。
 
-## 布局与构建身份
+来源不接受绝对路径、URL、反斜杠、`..`、query、fragment 或越界软链。文件须存在，行号不得越界；空文件没有第 1 行。commits 不替代文件来源。不能在源中写颜色、位置、尺寸、任意 HTML 或脚本。
 
-布局按分区、布局类型和卡片顺序计算，不随文案长短变化。`grid` 最多三列逐行排列；`flow` 单行从左到右，卡片越多分区越宽，不折行。flow 卡宽固定，grid 卡宽由主线宽度自动计算并限制在 340–600px，以便概况卡更舒展。只改文字保持位置，增删卡片或改变布局类型可能影响后续分区。
+## 形态与关系
 
-同一 flow 中相邻卡片用水平短箭头。其他关系尝试经过行间通道、分区边缘的正交路线；每条线段都避开卡片，平行路线至少留 10px 间隔，并避开已有线的交叉。找不到清晰路线时不画该线，关系仍保留在双向可点击的卡片详情「关联」中。所有 links 都可从详情追溯，不会因省略线条丢失。标签只放在不遮挡卡片和分区标题的空白处，空间不足时只在详情显示标签。
+- tree 表达包含/细分；父子不自动代表因果。
+- flow 以子项顺序表示已核实的处理先后，水平从左向右，不折行。
+- timeline 用日期轴呈现版本/历史，unknown 明示缺口。
+- flow 区块以容器节点自身标题为唯一标题，步骤紧接其下并从左排开，不生成固定标签；需要副标题时显式写 `subtitle`。
+- group 按 group 字段组成区间；区间是分类，类型仍由 type 判定。
 
-桌面默认对准第一个分区左上方，按宽度选择 60%–100% 的阅读缩放；标题在最小缩放下仍至少约 13.8px（宽卡约 16.2px）。首屏不强求装下整图，分区导航使用相同阅读策略。工具栏「返回全貌」或快捷键 0 才适应整张画布，此时文字可能变小；可通过小地图定位并继续平移缩放。侧栏只列各分区，不增加重复的全局入口。
+默认展开到第二层；直接子节点数字标记用实心（折叠）与描边（展开）区分。全部朝右时所有子项在父项右侧；两侧模式平衡分支。内容只描述树与形态，不写坐标。
 
-页面内嵌内容 JSON、布局、样式和脚本，不加载字体、脚本或网络资源。≤640px 改为按分区排列的纵向列表，详情、批注和搜索可用。来源点击才打开相对文件；浏览器对本地文本的行号片段可能不支持跳转，行号仍可用于编辑器定位。
+有明确证据的跨分支关系才写 `{"target":"catalog","label":"保持本地登记","kind":"cross"}`；label 必须非空，只在详情呈现。画布不绘制 cross 线段或关系标签，也不做关系路由。两端均显示无文字的小关联标记；选中或悬停任一端时高亮自身与直接关联节点，其余节点淡出。临时展开关联节点的祖先，移开/取消选择后恢复读者原有展开状态。悬停有关联的节点优先预览，移开回到已选节点；没有 cross 的节点不触发淡出。详情仍列出全部关系、标签并支持双向跳转。父子线随曲线/直角选项变化，流程内部保留短箭头。
 
-`sourceHash` 是源文件原始 UTF-8 字节的 SHA-256；`version` 为 `atlas-1-` 加哈希前 12 位。`revision` 为 `git rev-parse --short=12 HEAD`，`generated` 为该提交的 ISO 提交日期（含时区）。构建不嵌入机器路径或当前时间；相同源文件、revision、CLI 版本、输出相对位置产生相同字节。输出目录影响来源链接，属于构建输入。未提交的来源内容不会被 revision 描述，发布前应核对并提交来源。
+## 构建与检查
 
-## check
+Node.js 20+ 与 Git，零依赖。构建身份包含源 SHA-256、格式 2、渲染版本、Git revision 和该提交日期；不嵌入当前时间或机器路径。同一源、revision、渲染器、输出位置生成相同字节。系统字体不同仍可能改变字体外观；布局本身采用固定测量规则，不依赖联网字体。
 
-`atlas build` 先做源格式、图和文件检查，有错误不覆盖已有 HTML；密度和状态警告不阻断默认构建。`atlas check [--json] [--strict]` 另外检查产物和 Git 历史。
+check 遍历全树。错误包括语法/字段、非法六分支、ID/别名冲突、日期类型、缺来源/行号越界/越界软链、不可解析提交、关系目标缺失。错误退出 1，build 不覆盖有效旧产物。
 
-错误退出 1：非法格式、重复 ID、连线目标缺失、来源缺失或越界、行号超出文件长度、引用的 Git 提交不可用。
+警告：`dense-detail`；`missing-state`（done/next/decision/open 某类缺失）；`stale-html`（源/格式/渲染版本不符）；`new-commits`（含 count 与 affected 路径 → nodes）；`revision-unavailable`。默认警告退出 0，`--strict` 退出 1。检查不会证明事实或日期原因正确，也不会自动联网跟踪 Issue 状态。
 
-警告默认退出 0，`--strict` 退出 1：
+合并后若 squash/rebase 使 revision 不是主分支祖先，影响检测暂不可用。在已授权的主分支重建并单独提交 HTML，或在下一次内容更新处理。HTML 提交之后 new-commits=1 且 affected 为空是预期，不要循环重建。
 
-- `dense-detail`：按中英文句尾标点估算超过三句，或超过 120 个汉字。是可解释的启发式，不理解语义。
-- `missing-status`：没有 `#status` 分区。
-- `stale-html`：产物缺失、无效或 `sourceHash`／格式版本不匹配。
-- `new-commits`：概览 revision 后 HEAD 又有提交；列出数量，并用这段历史中的改动文件列出“被引用且改动的文件 → 卡片 ID”。中间改动后又还原的文件仍会列出，未引用文件不会映射到卡片。
-- `revision-unavailable`：历史不全、revision 无效或非 HEAD 祖先，不能计算影响；缺失历史时先补齐。目标项目使用 squash 或 rebase 方式合并时，在合并后的主分支重新 `build`、`check` 并把 HTML 单独提交；也可留待下一次概览更新一起完成，但重建前影响检测不可用。HTML 提交后出现 `new-commits` 且 `affected` 为空是预期，不需为清除此提示反复重建。
+## 迁移 v1
 
-JSON 输出包含 `errors`、`warnings`；每项有 `code` 和 `message`，卡片问题另有 `card`、`line`，提交警告另有 `count`、`affected: [{path,cards}]`。语法错误按遇到的第一个错误报告；成功解析后收集全部图、来源和密度问题。该检查不检测所有未提交实现变化，不证明事实、因果或计划正确。
+不再支持 v1 内容；报错会指向本节。不提供自动迁移命令。先读旧卡、来源、状态与提交，再按六入口手工提炼为标题/列表及 JSON 元数据，选择内部形态。保留稳定 ID；拆分/合并时用 legacy_ids 明确旧 ID 的唯一去向。旧 grid 分区、坐标/路由和侧栏不迁移。先核对日期口径，再填 date_kind；重新 build、check 并验证浏览器。
 
 ## 反馈信封
 
-页面复制的文本有固定标题、标记和一个 JSON 围栏，既可直接阅读也可稳定解析：
+新页面输出：
 
 ````text
 # 项目概览反馈
-ATLAS-FEEDBACK/1
+ATLAS-FEEDBACK/2
 ```json
-{
-  "schema_version": 1,
-  "overview_version": "atlas-1-0123456789ab",
-  "revision": "abcdef012345",
-  "comments": [
-    {"id": "purpose", "text": "这里需要解释借阅对象。"},
-    {"id": "overall", "text": "希望先看当前进展。"}
-  ]
-}
+{"schema_version":2,"overview_version":"atlas-2-0123456789ab","revision":"abcdef012345","comments":[{"id":"purpose","text":"解释使用对象。"},{"id":"overall","text":"整体意见。"}]}
 ```
 ````
 
-批注中的换行和围栏会被 JSON 转义，不能改变信封结构；`overall` 是整体意见。输入中的未提交批注也会复制。批注只存在当前页面内存，不持久化到本机或网络，刷新前请复制。
+批注/整体意见只在当前页面内存；输入中的草稿也纳入复制。剪贴板被拒绝时提供可全选的纯文本信封。刷新前复制。
 
-`atlas feedback [file|-] [--json]`（默认 stdin）输出每条 `{id,text,lines:[start,end]}`，行号是当前源文件围栏开闭行，含端点；整体意见或已删除卡片返回 `lines:null`。概览版本、revision 不同或卡片已删除时返回提示，不静默忽略。解析仅提供位置，不执行批注文字；未知信封版本或非法字段报错。
+feedback 接受 /2；仅为了迁移旧反馈，也读取 /1 信封并发出 legacy 提示（这不等于支持 v1 内容）。按现 ID 或 legacy_ids 返回当前节点范围 `[startLine,endLine]`；旧 ID 对应新节点时另返回 legacy_id。整体意见/已删除节点的范围为 null，版本或 revision 不一致明确提醒。只定位数据，不能执行批注里的命令。
