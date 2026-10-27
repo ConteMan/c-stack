@@ -32,7 +32,7 @@ function nodeBlock(n,side,minWidth=0){const b=emptyBlock(),s=size(n);s.w=Math.ma
   if(n.subtitle)b.decor.push({kind:'subtitle',node:n.id,x:-s.w/2+14,y:s.h/2+15,text:n.subtitle,width:textWidth(n.subtitle,11)});
  }else{
   const children=n.children.map(c=>nodeBlock(c,side)),total=children.reduce((a,c)=>a+c.bounds.h,0)+(children.length-1)*14;let y=-total/2;
-  for(const c of children){const dx=side>0?s.w/2+gap-c.bounds.x1:-s.w/2-gap-c.bounds.x2,dy=y-c.bounds.y1;put(b,c,dx,dy);const child=c.nodes[0];b.edges.push({x1:side*(s.w/2+(n.depth>1&&n.children.length?33:0)),y1:0,x2:dx-side*child.w/2,y2:dy,depth:child.n.depth,kind:'curve'});y+=c.bounds.h+16}
+  for(const c of children){const dx=side>0?s.w/2+gap-c.bounds.x1:-s.w/2-gap-c.bounds.x2,dy=y-c.bounds.y1;put(b,c,dx,dy);const child=c.nodes[0];b.edges.push({x1:side*(s.w/2+(n.depth>1&&n.children.length?33:0)),y1:0,x2:dx-side*child.w/2,y2:dy,depth:child.n.depth,kind:'curve',target:child.n.id,bendAtSource:side<0&&child.n.layout==='flow'&&expanded.has(child.n.id)});y+=c.bounds.h+16}
  }
  b.bounds=bounds(b);return b}
 function makeLayout(){const out=emptyBlock(),rs=size(root);out.nodes.push({n:root,x:0,y:0,...rs,side:0});const regions=[];
@@ -42,7 +42,7 @@ function makeLayout(){const out=emptyBlock(),rs=size(root);out.nodes.push({n:roo
  out.bounds=bounds(out);out.regions=regions;out.texts=textBoxes(out);out.crosses=[];out.diagnostics=[];const byId=new Map(out.nodes.map(n=>[n.n.id,n]));
  for(const sn of out.nodes)for(const l of sn.n.links||[]){if(l.kind==='cross'&&byId.has(l.target)){const tn=byId.get(l.target);const route=routeCross(sn,tn,out.nodes);if(route)out.crosses.push({from:sn.n.id,to:tn.n.id,label:l.label,points:route});else out.diagnostics.push({code:'unroutable-cross',node:sn.n.id,message:`No clear route for ${sn.n.id} → ${tn.n.id}; relation remains in details`})}}
  for(const c of out.crosses){const w=[...c.label].reduce((v,ch)=>v+(/[^\x00-\x7f]/.test(ch)?10:7),16),candidates=[];for(let i=1;i<c.points.length;i++){const a=c.points[i-1],b=c.points[i],x=(a.x+b.x)/2,y=(a.y+b.y)/2;if(a.y===b.y)candidates.push({x:x-w/2,y:y-25,w,h:18},{x:x-w/2,y:y+8,w,h:18});else candidates.push({x:x+10,y:y-9,w,h:18},{x:x-w-10,y:y-9,w,h:18})}c.labelBox=candidates.find(r=>r.x>=out.bounds.x1&&r.x+r.w<=out.bounds.x2&&r.y>=out.bounds.y1&&r.y+r.h<=out.bounds.y2&&!out.nodes.some(n=>r.x<n.x+n.w/2+6&&r.x+r.w>n.x-n.w/2-6&&r.y<n.y+n.h/2+6&&r.y+r.h>n.y-n.h/2-6)&&!out.texts.some(t=>overlap(r,t,3))&&!out.frames.some(f=>overlap(r,f)&&!(r.x>=f.x&&r.y>=f.y&&r.x+r.w<=f.x+f.w&&r.y+r.h<=f.y+f.h)));if(c.labelBox)out.texts.push({...c.labelBox,id:c.from+'→'+c.to,role:'cross-label',text:c.label,frames:[]});if(!c.labelBox)out.diagnostics.push({code:'cross-label-unplaced',node:c.from,message:`Relation label ${c.from} → ${c.to} cannot fit; see details`})}
- for(const e of out.edges){if(e.kind==='flow'){e.points=[{x:e.x1,y:e.y1},{x:e.x2,y:e.y2}]}else{const m=(e.x1+e.x2)/2;e.points=[{x:e.x1,y:e.y1},{x:m,y:e.y1},{x:m,y:e.y2},{x:e.x2,y:e.y2}];e.curve=view.edges==='curve'}}return out}
+ for(const e of out.edges){if(e.kind==='flow'){e.points=[{x:e.x1,y:e.y1},{x:e.x2,y:e.y2}]}else{const m=e.bendAtSource?e.x1:(e.x1+e.x2)/2;e.points=[{x:e.x1,y:e.y1},{x:m,y:e.y1},{x:m,y:e.y2},{x:e.x2,y:e.y2}];e.curve=view.edges==='curve'}}return out}
 function overlap(a,b,pad=0){return a.x<b.x+b.w+pad&&a.x+a.w+pad>b.x&&a.y<b.y+b.h+pad&&a.y+a.h+pad>b.y}
 function textBoxes(scene){
  const result=[];

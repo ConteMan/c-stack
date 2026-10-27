@@ -69,3 +69,14 @@ test('subtitles must be explicit nonempty single-line text; group labels come on
  const d=parse(source.replaceAll(',"group":"已决定"','').replaceAll(',"group":"待定"',''));
  const scene=layout(d.root,{expanded:d.nodes.map(n=>n.id)});assert.ok(!scene.frames.filter(f=>f.kind==='group').some(f=>f.label));assertTextGeometry(scene);
 });
+
+test('incoming left flow edge turns outside the step row',()=>{
+ const d=parse(source),scene=layout(d.root,{expanded:d.nodes.map(n=>n.id)});
+ const edge=scene.edges.find(e=>e.target==='pipeline');
+ assert.ok(edge.bendAtSource);
+ assert.equal(edge.points[1].x,edge.x1);
+ assert.equal(edge.points[2].x,edge.x1);
+ const steps=scene.nodes.filter(n=>n.n.parent==='pipeline');
+ const curve=t=>{const [a,b,c,d]=edge.points,u=1-t;return {x:u*u*u*a.x+3*u*u*t*b.x+3*u*t*t*c.x+t*t*t*d.x,y:u*u*u*a.y+3*u*u*t*b.y+3*u*t*t*c.y+t*t*t*d.y}};
+ for(let i=1;i<=60;i++)for(const n of steps)assert.equal(intersects(curve((i-1)/60),curve(i/60),n),false,n.n.id);
+});
