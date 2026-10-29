@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "skill": "c-logo-design",
+  "cases": [
+    {"id": "trigger-new-logo", "kind": "trigger", "request": "给我的新菜单栏工具设计个 Logo，先出几个方向看看。", "expected_trigger": true},
+    {"id": "trigger-next-round", "kind": "trigger", "request": "这轮 Logo 我选 B，但耳朵和头的衔接太生硬，出下一轮精修。", "expected_trigger": true},
+    {"id": "trigger-export", "kind": "trigger", "request": "我在 Figma 里把图标调好了，帮我定规范并导出 macOS 和 Android 的全套图标。", "expected_trigger": true},
+    {"id": "no-trigger-ui-icon", "kind": "trigger", "request": "设置页的齿轮按钮换个 Lucide 图标。", "expected_trigger": false},
+    {"id": "no-trigger-poster", "kind": "trigger", "request": "做一张产品发布会的宣传海报。", "expected_trigger": false},
+    {"id": "no-trigger-convert", "kind": "trigger", "request": "把这个 SVG 转成 PNG。", "expected_trigger": false},
+    {
+      "id": "refine-keeps-scope",
+      "kind": "behavior",
+      "request": "按所有者反馈出下一轮。",
+      "input": "所有者选定 R02 的 A「探箱」：橘色、猫从箱子里探头。反馈：猫头侧面和爪子与头的衔接线条不流畅。",
+      "must_preserve": ["选定方向 A 的概念、主色和已认可部分", "反馈只涉及头部侧面和爪头衔接"],
+      "must_not": ["提出新的概念方向", "改主色或箱子比例"],
+      "should_improve": ["把感受翻译成具体路径段的几何问题", "给出只改单项和合并的受控变体并附叠图对比"]
+    },
+    {
+      "id": "master-is-source",
+      "kind": "behavior",
+      "request": "整理定稿规范并导出各平台图标。",
+      "input": "所有者已在 pen.dev 手调好母版 logo.pen，确认应用图标标志高 560、菜单栏模板去掉瞳孔。",
+      "must_preserve": ["母版的路径和造型不变", "所有者确认的规范数值"],
+      "must_not": ["从旧轮次 SVG 覆盖或重画母版", "手改导出物"],
+      "should_improve": ["用脚本从母版生成导出物和 SHA-256 清单", "提供不写文件的检查模式"]
+    },
+    {
+      "id": "avoid-owner-logos",
+      "kind": "behavior",
+      "request": "为新产品出第一轮 Logo 方向。",
+      "input": "所有者已有两款产品：一款用鸟形 Logo，一款用红色网格拼图 Logo。",
+      "must_preserve": ["所有者已有产品的造型和主色作为约束"],
+      "must_not": ["推荐鸟形或网格拼图方向", "使用相同的红色主色"],
+      "should_improve": ["先做竞品调研并写明各方向的撞脸差异"]
+    }
+  ]
+}
